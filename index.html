@@ -3,84 +3,179 @@
 <head>
   <meta charset="UTF-8" />
   <title>PippyBots</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f6f8;
+      color: #333;
+      margin: 40px auto;
+      max-width: 600px;
+      padding: 20px;
+      border-radius: 10px;
+      background: white;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    h1, h2 {
+      color: #2c3e50;
+    }
+
+    input, textarea, select, button {
+      width: 100%;
+      margin: 10px 0;
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      box-sizing: border-box;
+    }
+
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #2980b9;
+    }
+
+    ul {
+      list-style-type: none;
+      padding: 0;
+    }
+
+    li {
+      background: #ecf0f1;
+      margin-bottom: 5px;
+      padding: 8px 12px;
+      border-radius: 5px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .webhook-entry {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .webhook-name {
+      font-weight: bold;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    /* Smaller buttons for toggling list & post all */
+    #toggleListBtn, #postAllBtn {
+      width: auto;
+      padding: 10px 20px;
+      font-size: 14px;
+    }
+  </style>
 </head>
 <body>
-  <h1>Add webhook</h1>
+  <h1>PippyBots Webhook Messenger</h1>
+
+  <h2>Add Webhook</h2>
   <input type="text" id="webhookInput" placeholder="Enter Webhook URL" />
+  <input type="text" id="webhookNameInput" placeholder="Enter a name (optional)" />
   <button id="addWebhookBtn">Add Webhook</button>
 
-  <h2>Webhook List</h2>
-  <ul id="webhookList"></ul>
+  <div class="button-row">
+    <button id="toggleListBtn">Show Webhook List</button>
+    <button id="postAllBtn">Post to All</button>
+  </div>
 
-  <h1>Send Message</h1>
+  <div id="webhookContainer" class="hidden">
+    <h2>Webhook List</h2>
+    <ul id="webhookList"></ul>
+  </div>
+
+  <h2>Send Message</h2>
   <select id="channelSelect">
-    <!-- Dynamically populated -->
+    <!-- Populated dynamically -->
   </select>
 
-  <br /><br />
-  <textarea id="messageInput" rows="5" cols="40" placeholder="Your message here"></textarea>
-  <br />
+  <textarea id="messageInput" rows="5" placeholder="Your message here"></textarea>
   <button id="sendBtn">Send</button>
   <p id="status"></p>
 
   <script>
+    const defaultWebhooks = [
+      {
+        url: 'https://discord.com/api/webhooks/1372798063629959168/Ez2bPgWpoBcV1BXTtfhO67BDxARIK49N3Rykfl7qQm4YoNB49QRi1qAmuVh4HEKwmcOb',
+        name: 'general'
+      },
+      {
+        url: 'https://discord.com/api/webhooks/1372820745188675634/2aNS8fMWh5VhAOAJJURC3z1380-7yHmam_mxcPfNxbCroCNpVjg20DAVJCUmi3I60uHJ',
+        name: 'updates'
+      },
+      {
+        url: 'https://discord.com/api/webhooks/1372820921051512912/TME_20Q-Tajd4LKFgT7Pa0EgMzKjYnKk5-ytmTl9L5VWWLYPHz3ePSA3gC8ImlTc_ITI',
+        name: 'announcements'
+      }
+    ];
+
     const sendBtn = document.getElementById('sendBtn');
     const messageInput = document.getElementById('messageInput');
     const channelSelect = document.getElementById('channelSelect');
     const status = document.getElementById('status');
     const webhookInput = document.getElementById('webhookInput');
+    const webhookNameInput = document.getElementById('webhookNameInput');
     const addWebhookBtn = document.getElementById('addWebhookBtn');
     const webhookListEl = document.getElementById('webhookList');
-
-    const defaultWebhooks = [
-      'https://discord.com/api/webhooks/1372798063629959168/Ez2bPgWpoBcV1BXTtfhO67BDxARIK49N3Rykfl7qQm4YoNB49QRi1qAmuVh4HEKwmcOb',
-      'https://discord.com/api/webhooks/1372820745188675634/2aNS8fMWh5VhAOAJJURC3z1380-7yHmam_mxcPfNxbCroCNpVjg20DAVJCUmi3I60uHJ',
-      'https://discord.com/api/webhooks/1372820921051512912/TME_20Q-Tajd4LKFgT7Pa0EgMzKjYnKk5-ytmTl9L5VWWLYPHz3ePSA3gC8ImlTc_ITI'
-    ];
+    const toggleListBtn = document.getElementById('toggleListBtn');
+    const webhookContainer = document.getElementById('webhookContainer');
+    const postAllBtn = document.getElementById('postAllBtn');
 
     let webhookList = JSON.parse(localStorage.getItem('webhooks'));
 
-    // If no saved list, initialize with default webhooks
     if (!Array.isArray(webhookList) || webhookList.length === 0) {
       webhookList = [...defaultWebhooks];
-      localStorage.setItem('webhooks', JSON.stringify(webhookList));
-    } else {
-      // Merge missing default webhooks (if user cleared them)
-      defaultWebhooks.forEach(url => {
-        if (!webhookList.includes(url)) webhookList.push(url);
-      });
       localStorage.setItem('webhooks', JSON.stringify(webhookList));
     }
 
     function renderList() {
       webhookListEl.innerHTML = '';
       channelSelect.innerHTML = '';
-      webhookList.forEach((url, index) => {
+      webhookList.forEach((entry, index) => {
         const li = document.createElement('li');
-        li.textContent = url;
+        li.classList.add('webhook-entry');
+        li.innerHTML = `<span class="webhook-name">${entry.name || `Webhook ${index + 1}`}</span><br><small>${entry.url}</small>`;
         webhookListEl.appendChild(li);
 
         const option = document.createElement('option');
-        option.value = url;
-        option.textContent = `Webhook ${index + 1}`;
+        option.value = entry.url;
+        option.textContent = entry.name || `Webhook ${index + 1}`;
         channelSelect.appendChild(option);
       });
     }
 
     addWebhookBtn.addEventListener('click', () => {
       const url = webhookInput.value.trim();
-      if (url && url.startsWith('https://discord.com/api/webhooks/')) {
-        if (!webhookList.includes(url)) {
-          webhookList.push(url);
-          localStorage.setItem('webhooks', JSON.stringify(webhookList));
-          renderList();
-        } else {
-          alert('Webhook already exists.');
-        }
-        webhookInput.value = '';
-      } else {
+      const name = webhookNameInput.value.trim();
+      if (!url || !url.startsWith('https://discord.com/api/webhooks/')) {
         alert('Please enter a valid Discord webhook URL');
+        return;
       }
+      if (webhookList.some(entry => entry.url === url)) {
+        alert('This webhook is already added.');
+        return;
+      }
+      webhookList.push({ url, name: name || `Webhook ${webhookList.length + 1}` });
+      localStorage.setItem('webhooks', JSON.stringify(webhookList));
+      webhookInput.value = '';
+      webhookNameInput.value = '';
+      renderList();
     });
 
     sendBtn.addEventListener('click', async () => {
@@ -95,9 +190,7 @@
       try {
         const response = await fetch(webhookURL, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content: message })
         });
 
@@ -113,7 +206,43 @@
       }
     });
 
-    // Render the webhook list on page load
+    postAllBtn.addEventListener('click', async () => {
+      const message = messageInput.value.trim();
+      if (!message) {
+        status.textContent = 'Please enter a message to post to all webhooks.';
+        return;
+      }
+      status.textContent = 'Sending to all webhooks...';
+
+      let successCount = 0;
+      let failureCount = 0;
+
+      await Promise.all(webhookList.map(async (entry) => {
+        try {
+          const res = await fetch(entry.url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: message })
+          });
+          if (res.ok) {
+            successCount++;
+          } else {
+            failureCount++;
+          }
+        } catch {
+          failureCount++;
+        }
+      }));
+
+      status.textContent = `Done! Success: ${successCount}, Failures: ${failureCount}`;
+      if(successCount > 0) messageInput.value = '';
+    });
+
+    toggleListBtn.addEventListener('click', () => {
+      webhookContainer.classList.toggle('hidden');
+      toggleListBtn.textContent = webhookContainer.classList.contains('hidden') ? 'Show Webhook List' : 'Hide Webhook List';
+    });
+
     renderList();
   </script>
 </body>
