@@ -2,22 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Webhook messager</title>
+  <title>Webhook Messager</title>
   <style>
+    /* Dark theme styles */
     body {
       font-family: Arial, sans-serif;
-      background-color: #f4f6f8;
-      color: #333;
+      background-color: #121212;
+      color: #e0e0e0;
       margin: 40px auto;
       max-width: 600px;
       padding: 20px;
       border-radius: 10px;
-      background: white;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 0 10px rgba(0,0,0,0.8);
     }
 
     h1, h2 {
-      color: #2c3e50;
+      color: #81a1c1;
+      margin-bottom: 10px;
     }
 
     input, textarea, select, button {
@@ -25,33 +26,48 @@
       margin: 10px 0;
       padding: 10px;
       font-size: 16px;
-      border: 1px solid #ccc;
       border-radius: 8px;
       box-sizing: border-box;
+      border: 1px solid #444;
+      background-color: #222;
+      color: #eee;
+      transition: border-color 0.3s ease;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: #81a1c1;
+      outline: none;
+      background-color: #1a1a1a;
     }
 
     button {
-      background-color: #3498db;
+      background-color: #5e81ac;
       color: white;
       border: none;
       cursor: pointer;
       transition: background 0.3s ease;
+      font-weight: 600;
     }
-
     button:hover {
-      background-color: #2980b9;
+      background-color: #81a1c1;
     }
 
     ul {
       list-style-type: none;
       padding: 0;
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #444;
+      border-radius: 8px;
+      background-color: #1e1e1e;
     }
 
     li {
-      background: #ecf0f1;
-      margin-bottom: 5px;
       padding: 8px 12px;
-      border-radius: 5px;
+      border-bottom: 1px solid #333;
+      word-wrap: break-word;
+    }
+    li:last-child {
+      border-bottom: none;
     }
 
     .hidden {
@@ -60,30 +76,38 @@
 
     .webhook-entry {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
+      flex-direction: column;
+      margin-bottom: 5px;
     }
 
     .webhook-name {
       font-weight: bold;
+      color: #88c0d0;
     }
 
     .button-row {
       display: flex;
       gap: 10px;
       margin-top: 10px;
+      flex-wrap: wrap;
     }
 
-    /* Smaller buttons for toggling list & post all */
-    #toggleListBtn, #postAllBtn {
+    #toggleListBtn, #postAllBtn, #resetBtn {
       width: auto;
       padding: 10px 20px;
       font-size: 14px;
+      flex-grow: 1;
+    }
+
+    #status {
+      margin-top: 15px;
+      min-height: 24px;
+      font-weight: 600;
     }
   </style>
 </head>
 <body>
-  <h1>PippyBots Webhook Messenger</h1>
+  <h1>Webhook Messager</h1>
 
   <h2>Add Webhook</h2>
   <input type="text" id="webhookInput" placeholder="Enter Webhook URL" />
@@ -93,6 +117,7 @@
   <div class="button-row">
     <button id="toggleListBtn">Show Webhook List</button>
     <button id="postAllBtn">Post to All</button>
+    <button id="resetBtn">Reset</button>
   </div>
 
   <div id="webhookContainer" class="hidden">
@@ -101,9 +126,7 @@
   </div>
 
   <h2>Send Message</h2>
-  <select id="channelSelect">
-    <!-- Populated dynamically -->
-  </select>
+  <select id="channelSelect"></select>
 
   <textarea id="messageInput" rows="5" placeholder="Your message here"></textarea>
   <button id="sendBtn">Send</button>
@@ -136,6 +159,7 @@
     const toggleListBtn = document.getElementById('toggleListBtn');
     const webhookContainer = document.getElementById('webhookContainer');
     const postAllBtn = document.getElementById('postAllBtn');
+    const resetBtn = document.getElementById('resetBtn');
 
     let webhookList = JSON.parse(localStorage.getItem('webhooks'));
 
@@ -225,25 +249,4 @@
             body: JSON.stringify({ content: message })
           });
           if (res.ok) {
-            successCount++;
-          } else {
-            failureCount++;
-          }
-        } catch {
-          failureCount++;
-        }
-      }));
-
-      status.textContent = `Done! Success: ${successCount}, Failures: ${failureCount}`;
-      if(successCount > 0) messageInput.value = '';
-    });
-
-    toggleListBtn.addEventListener('click', () => {
-      webhookContainer.classList.toggle('hidden');
-      toggleListBtn.textContent = webhookContainer.classList.contains('hidden') ? 'Show Webhook List' : 'Hide Webhook List';
-    });
-
-    renderList();
-  </script>
-</body>
-</html>
+            successCount
