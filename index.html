@@ -9,7 +9,7 @@
 
   <select id="channelSelect">
     <option value="1328561469410775134">general</option>
-    <option value="1328561469410775134">updates</option>
+    <option value="1328561469410775135">updates</option>
     <option value="1329596448127451156">announcements</option>
   </select>
 
@@ -25,7 +25,8 @@
     const SUPABASE_URL = 'https://hpozhvkrlckwybrjasjn.supabase.co'
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhwb3podmtybGNrd3licmphc2puIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczNzI2NDEsImV4cCI6MjA2Mjk0ODY0MX0.2bbU0qD1zGmJjAQpSPjub5De4ZCD5NqRd9SEhzptI28'
 
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    // Create supabase client with a different variable name
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
     const sendBtn = document.getElementById('sendBtn')
     const messageInput = document.getElementById('messageInput')
@@ -41,7 +42,7 @@
         return
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('messages')
         .insert([{ message, channel_id }])
 
