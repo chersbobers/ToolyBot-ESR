@@ -1,59 +1,52 @@
-=<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Send Message to Discord</title>
+  <title>Send Message via Discord Webhook</title>
 </head>
 <body>
   <h1>Send Message to Discord</h1>
-
-  <select id="channelSelect">
-    <option value="1328561469410775134">general</option>
-    <option value="1328561469410775135">updates</option>
-    <option value="1329596448127451156">announcements</option>
-  </select>
-
-  <br /><br />
 
   <textarea id="messageInput" rows="5" cols="40" placeholder="Your message here"></textarea>
   <br />
   <button id="sendBtn">Send</button>
   <p id="status"></p>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    const SUPABASE_URL = 'https://hpozhvkrlckwybrjasjn.supabase.co'
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhwb3podmtybGNrd3licmphc2puIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczNzI2NDEsImV4cCI6MjA2Mjk0ODY0MX0.2bbU0qD1zGmJjAQpSPjub5De4ZCD5NqRd9SEhzptI28'
+    const webhookURL = 'https://discord.com/api/webhooks/1372798063629959168/Ez2bPgWpoBcV1BXTtfhO67BDxARIK49N3Rykfl7qQm4YoNB49QRi1qAmuVh4HEKwmcOb';
 
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-
-    const sendBtn = document.getElementById('sendBtn')
-    const messageInput = document.getElementById('messageInput')
-    const channelSelect = document.getElementById('channelSelect')
-    const status = document.getElementById('status')
+    const sendBtn = document.getElementById('sendBtn');
+    const messageInput = document.getElementById('messageInput');
+    const status = document.getElementById('status');
 
     sendBtn.addEventListener('click', async () => {
-      const message = messageInput.value.trim()
-      const channel_id = channelSelect.value
+      const message = messageInput.value.trim();
 
       if (!message) {
-        status.textContent = 'Please enter a message.'
-        return
+        status.textContent = 'Please enter a message.';
+        return;
       }
 
-      // Insert message, no columns param, just clean insert
-      const { data, error } = await supabaseClient
-        .from('messages')
-        .insert([{ message, channel_id }])
+      try {
+        const response = await fetch(webhookURL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ content: message })
+        });
 
-      if (error) {
-        status.textContent = 'Error: ' + error.message
-        console.error('Insert error:', error)
-      } else {
-        status.textContent = 'Message sent successfully!'
-        messageInput.value = ''
+        if (response.ok) {
+          status.textContent = 'Message sent successfully!';
+          messageInput.value = '';
+        } else {
+          const errorText = await response.text();
+          status.textContent = 'Error sending message: ' + errorText;
+        }
+      } catch (error) {
+        status.textContent = 'Error: ' + error.message;
       }
-    })
+    });
   </script>
 </body>
 </html>
