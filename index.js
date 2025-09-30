@@ -33,9 +33,10 @@ const parser = new Parser();
 // Store last video ID to avoid duplicate notifications
 let lastVideoId = '';
 
-// YouTube channel ID for PippyOC - UPDATE THIS WITH THE ACTUAL CHANNEL ID
+// YouTube channel ID - Set in Render environment variables
 const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID;
 const NOTIFICATION_CHANNEL_ID = process.env.NOTIFICATION_CHANNEL_ID;
+
 // Check for new videos every 5 minutes
 async function checkForNewVideos() {
   try {
@@ -87,9 +88,54 @@ client.once('ready', () => {
   setInterval(checkForNewVideos, 300000);
 });
 
+// Cooldown map for rate limiting
+const cooldowns = new Map();
+
 // Message commands
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
+  
+  // Ignore DMs - only respond in servers
+  if (!message.guild) return;
+
+  // Check if bot is mentioned
+  const botMention = `<@${client.user.id}>`;
+  const isMentioned = message.content.startsWith(botMention);
+  
+  // Handle mention-based commands
+  if (isMentioned) {
+    const args = message.content.slice(botMention.length).trim().split(/ +/);
+    const command = args[0]?.toLowerCase();
+    
+    if (command === '8ball') {
+      const responses = [
+        'Yes, definitely!', 'No way!', 'Maybe...', 'Ask again later',
+        'Absolutely!', 'I doubt it', 'Signs point to yes', 'Very doubtful',
+        'Without a doubt', 'My sources say no', 'Outlook good', 'Cannot predict now'
+      ];
+      const answer = responses[Math.floor(Math.random() * responses.length)];
+      return message.reply(`🎱 ${answer}`);
+    }
+    
+    if (command === 'roll') {
+      const roll = Math.floor(Math.random() * 6) + 1;
+      return message.reply(`🎲 You rolled a **${roll}**!`);
+    }
+    
+    if (command === 'flip') {
+      const result = Math.random() < 0.5 ? 'Heads' : 'Tails';
+      return message.reply(`🪙 The coin landed on **${result}**!`);
+    }
+    
+    if (command === 'help') {
+      return message.reply('Try: `@Tooly 8ball`, `@Tooly roll`, or `@Tooly flip`\nOr use slash commands like `/helpmsg`');
+    }
+    
+    // If mentioned but no valid command
+    if (!command) {
+      return message.reply('Hi! Try `@Tooly help` to see what I can do! 👋');
+    }
+  }
 
   // ===== BASIC COMMANDS =====
   if (message.content === '/hello') {
@@ -103,12 +149,13 @@ client.on('messageCreate', async (message) => {
   }
 
   if (message.content === '/itest') {
-  const embed = new EmbedBuilder()
-    .setColor(0x0099ff)
-    .setImage('https://i.ibb.co/BDhQV8B/image.png');
-  
-  message.reply({ content: 'yotsuba', embeds: [embed] });
-}
+    const embed = new EmbedBuilder()
+      .setColor(0x0099ff)
+      .setImage('https://i.ibb.co/BDhQV8B/image.png');
+    
+    message.reply({ content: 'yotsuba', embeds: [embed] });
+  }
+
   // ===== VOICE COMMANDS =====
   if (message.content === '/join') {
     if (!message.member.voice.channel) {
@@ -138,14 +185,25 @@ client.on('messageCreate', async (message) => {
   }
 
   if (message.content.startsWith('/tts ')) {
+    // Check cooldown
+    const cooldownTime = 5000; // 5 seconds
+    if (cooldowns.has(message.author.id)) {
+      const expirationTime = cooldowns.get(message.author.id) + cooldownTime;
+      if (Date.now() < expirationTime) {
+        const timeLeft = (expirationTime - Date.now()) / 1000;
+        return message.reply(`⏳ Please wait ${timeLeft.toFixed(1)} seconds before using TTS again!`);
+      }
+    }
+    
     if (!message.member.voice.channel) {
       return message.reply('You need to be in a voice channel to use TTS!');
     }
 
     const text = message.content.slice(5);
+    cooldowns.set(message.author.id, Date.now());
     
     if (!text) {
-      return message.reply('Please provide text! Example: `!tts Hello everyone`');
+      return message.reply('Please provide text! Example: `/tts Hello everyone`');
     }
 
     const fileName = `tts-${Date.now()}.mp3`;
@@ -229,17 +287,73 @@ client.on('messageCreate', async (message) => {
     message.reply(`🎱 ${answer}`);
   }
 
-  // ===== YOUTUBE COMMANDS =====
-  if (message.content === '/checkvideos') {
-    message.reply('Checking for new PippyOC videos... 🔍');
-    await checkForNewVideos();
+  // ===== ADMIN COMMANDS =====
+  if (message.content.startsWith('/say ')) {
+    if (!message.member.permissions.has('Administrator')) {
+      return message.reply('❌ You need administrator permissions to use this!');
+    }
+    
+    const text = message.content.slice(5);
+    
+    if (!text) {
+      return message.reply('Please provide a message! Example: `/say Hello everyone!`');
+    }
+    
+    await message.delete();
+    message.channel.send(text);
   }
 
-  if (message.content === '/setchannel') {
+  if (message.content.startsWith('/sayto ')) {
     if (!message.member.permissions.has('Administrator')) {
-      return message.reply('You need administrator permissions to use this command!');
+      return message.reply('❌ You need administrator permissions to use this!');
     }
-    message.reply(`Set this channel (${message.channel.name}) as the notification channel in the code!`);
+    
+    const args = message.content.slice(7).split(' ');
+    const channelId = args[0];
+    const text = args.slice(1).join(' ');
+    
+    if (!channelId || !text) {
+      return message.reply('Usage: `/sayto [channel-id] [message]`\nExample: `/sayto 123456789 Hello!`');
+    }
+    
+    const targetChannel = client.channels.cache.get(channelId);
+    
+    if (!targetChannel) {
+      return message.reply('❌ Channel not found!');
+    }
+    
+    await message.delete();
+    targetChannel.send(text);
+    message.author.send(`✅ Message sent to ${targetChannel.name}`).catch(() => {});
+  }
+
+  if (message.content.startsWith('/embed ')) {
+    if (!message.member.permissions.has('Administrator')) {
+      return message.reply('❌ You need administrator permissions to use this!');
+    }
+    
+    const text = message.content.slice(7);
+    
+    if (!text) {
+      return message.reply('Please provide a message! Example: `/embed Cool announcement!`');
+    }
+    
+    const embed = new EmbedBuilder()
+      .setColor(0x0099ff)
+      .setDescription(text)
+      .setTimestamp();
+    
+    await message.delete();
+    message.channel.send({ embeds: [embed] });
+  }
+
+  // ===== YOUTUBE COMMANDS =====
+  if (message.content === '/checkvideos') {
+    if (!message.member.permissions.has('ManageGuild')) {
+      return message.reply('❌ You need Manage Server permissions to use this!');
+    }
+    message.reply('Checking for new PippyOC videos... 🔍');
+    await checkForNewVideos();
   }
 
   // ===== HELP COMMAND =====
@@ -250,10 +364,11 @@ client.on('messageCreate', async (message) => {
       .setDescription('Here are all available commands:')
       .addFields(
         { name: '🎤 Voice Commands', value: '`/join` - Join voice channel\n`/leave` - Leave voice channel\n`/tts <text>` - Text-to-speech' },
-        { name: 'ℹ️ Info Commands', value: '`/serverinfo` - Server details\n`!userinfo` - Your user info\n`/ping` - Check latency' },
-        { name: '🎮 Fun Commands', value: '`/roll` - Roll a dice\n`!flip` - Flip a coin\n`/8ball` - Ask the magic 8-ball' },
+        { name: 'ℹ️ Info Commands', value: '`/serverinfo` - Server details\n`/userinfo` - Your user info\n`/ping` - Check latency' },
+        { name: '🎮 Fun Commands', value: '`/roll` - Roll a dice\n`/flip` - Flip a coin\n`/8ball` - Ask the magic 8-ball' },
         { name: '📺 YouTube Commands', value: '`/checkvideos` - Manually check for new videos' },
-        { name: '⚙️ Other', value: '`/hello` - Say hello\n`/helpmsg` - Show this message' }
+        { name: '👑 Admin Commands', value: '`/say <text>` - Bot says something\n`/sayto <channel-id> <text>` - Send to specific channel\n`/embed <text>` - Send as embed' },
+        { name: '⚙️ Other', value: '`/hello` - Say hello\n`/helpmsg` - Show this message\n`@Tooly 8ball` - Mention commands' }
       )
       .setFooter({ text: 'Use / before each command' });
 
