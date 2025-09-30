@@ -8,7 +8,7 @@ const Parser = require('rss-parser');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const Client = new Client({
+const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers, // Required for detecting new members
@@ -27,14 +27,6 @@ app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
 
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildVoiceStates,
-  ],
-});
 
 client.on('guildMemberAdd', member => {
   if (member.user.bot) return; // Ignore bots
