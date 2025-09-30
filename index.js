@@ -5,10 +5,18 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const Parser = require('rss-parser');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const Client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers, // Required for detecting new members
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildVoiceStates,
+  ],
+});
 app.get('/', (req, res) => {
   res.send('Bot is running!');
 });
@@ -33,6 +41,20 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates,
   ],
+});
+
+client.on('guildMemberAdd', member => {
+  if (member.user.bot) return; // Ignore bots
+
+  const welcomeMessage = `
+👋 Welcome to **${member.guild.name}**, ${member.user.username}!
+
+I am the bot for pippy i do stuff that is cool and yep use /help or just use @Tooly for help
+`;
+
+  member.send(welcomeMessage).catch(err => {
+    console.log(`❌ Couldn't send DM to ${member.user.tag} (maybe DMs are disabled).`);
+  });
 });
 
 const parser = new Parser();
@@ -63,7 +85,17 @@ const commands = [
     .addStringOption(option => option.setName('color').setDescription('Hex color (e.g., #FF0000)').setRequired(false)),
   new SlashCommandBuilder().setName('checkvideos').setDescription('Check for new PippyOC videos (Mod only)'),
   new SlashCommandBuilder().setName('help').setDescription('Show all commands'),
-  
+  new SlashCommandBuilder()
+  .setName('dm')
+  .setDescription('Send a DM to a user (Mod only)')
+  .addUserOption(option => 
+    option.setName('user')
+      .setDescription('User to message')
+      .setRequired(true))
+  .addStringOption(option => 
+    option.setName('message')
+      .setDescription('Message content')
+      .setRequired(true)),
 ];
 
 async function checkForNewVideos() {
@@ -126,6 +158,23 @@ client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const { commandName } = interaction;
+
+  if (commandName === 'dm') {
+  if (!interaction.member.permissions.has('ManageMessages')) {
+    return interaction.reply({ content: '❌ Only moderators can use this command.', ephemeral: true });
+  }
+
+  const targetUser = interaction.options.getUser('user');
+  const message = interaction.options.getString('message');
+
+  try {
+    await targetUser.send(`📬 **Message from ${interaction.guild.name} Mod Team:**\n\n${message}`);
+    await interaction.reply({ content: `✅ Message sent to ${targetUser.tag}`, ephemeral: true });
+  } catch (error) {
+    console.error(`❌ Could not DM ${targetUser.tag}:`, error);
+    await interaction.reply({ content: `❌ Could not send DM. The user may have DMs off.`, ephemeral: true });
+  }
+}
 
   if (commandName === 'hello') {
     await interaction.reply('Hello! 👋');
