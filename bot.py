@@ -308,6 +308,16 @@ async def serverinfo(interaction: discord.Interaction):
     embed.add_field(name='👑 Owner', value=f'<@{guild.owner_id}>', inline=True)
     await interaction.response.send_message(embed=embed)
 
+@bot.tree.command(name='botinfo', description='Show bots information')
+async def botinfo(interaction: discord.Interaction):
+    embed = discord.Embed(title='Bot Information', color=0x9B59B6, timestamp=datetime.utcnow())
+    embed.add_field(name='🤖 Name', value=bot.user.name, inline=True)
+    embed.add_field(name='🆔 ID', value=str(bot.user.id), inline=True)
+    embed.add_field(name='📅 Created', value=bot.user.created_at.strftime('%Y-%m-%d'), inline=True)
+    embed.add_field(name='💻 Server', value=("Render w 512mb of ram and 0.1 cpu"), inline=True)
+    embed.add_field(name='🅿 Python ver', value=("Discord.py 2.3.2 on python 3.11.1"), inline=True)
+    await interaction.response.send_message(embed=embed)
+
 @bot.tree.command(name='userinfo', description='Show user information')
 @app_commands.describe(user='User to check')
 async def userinfo(interaction: discord.Interaction, user: Optional[discord.Member] = None):
