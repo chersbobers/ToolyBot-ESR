@@ -374,12 +374,12 @@ async def random_pet(interaction: discord.Interaction):
                     embed.set_image(url=data[0]['url'])
                     await interaction.followup.send(embed=embed)
             if pet_num == 2:
-            async with session.get('https://api.thedogapi.com/v1/images/search', timeout=aiohttp.ClientTimeout(total=5)) as resp:
-                data = await resp.json()
-                embed = discord.Embed(title='🐶 Random Pet!', color=0xFF69B4, timestamp=datetime.utcnow())
-                embed.set_image(url=data[0]['url'])
-                await interaction.followup.send(embed=embed)
-    except:
+                async with session.get('https://api.thedogapi.com/v1/images/search', timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                    data = await resp.json()
+                    embed = discord.Embed(title='🐶 Random Pet!', color=0xFF69B4, timestamp=datetime.utcnow())
+                    embed.set_image(url=data[0]['url'])
+                    await interaction.followup.send(embed=embed)
+     except:
         await interaction.followup.send('Failed to fetch a pet picture 😥')
 
 @bot.tree.command(name='joke', description='Get a random joke')
