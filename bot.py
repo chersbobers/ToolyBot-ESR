@@ -12,6 +12,7 @@ from typing import Optional
 import logging
 import random
 from duckduckgo_search import DDGS
+from bs4 import BeautifulSoup
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -336,6 +337,33 @@ async def userinfo(interaction: discord.Interaction, user: Optional[discord.Memb
 async def roll(interaction: discord.Interaction):
     result = random.randint(1, 6)
     await interaction.response.send_message(f'🎲 You rolled a **{result}**!')
+
+@bot.tree.command(name='lyrics', description='Search for song lyrics')
+@app_commands.describe(song='Song name', artist='Artist name')
+async def lyrics(interaction: discord.Interaction, song: str, artist: str):
+    await interaction.response.defer()
+    try:
+        # Format for AZLyrics URL
+        song_clean = song.lower().replace(' ', '')
+        artist_clean = artist.lower().replace(' ', '')
+        url = f'https://www.azlyrics.com/lyrics/{artist_clean}/{song_clean}.html'
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    embed = discord.Embed(
+                        title=f'🎵 {song}',
+                        description=f'by {artist}',
+                        color=0xFF69B4,
+                        url=url,
+                        timestamp=datetime.utcnow()
+                    )
+                    embed.add_field(name='View Lyrics', value=f'[Click here]({url})', inline=False)
+                    await interaction.followup.send(embed=embed)
+                else:
+                    await interaction.followup.send('Song not found 😥')
+    except:
+        await interaction.followup.send('Failed to find lyrics 😥')
 
 @bot.tree.command(name='flip', description='Flip a coin')
 async def flip(interaction: discord.Interaction):
