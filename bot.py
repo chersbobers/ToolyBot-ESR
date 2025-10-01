@@ -364,9 +364,9 @@ async def Doggy(interaction: discord.Interaction):
 @bot.tree.command(name='randompet', description='Get a random pet picture')
 async def random_pet(interaction: discord.Interaction):
     await interaction.response.defer()
+    pet_num = random.randint(1, 2)  
     try:
         async with aiohttp.ClientSession() as session:
-            pet_num = random.randint(1, 2)
             if pet_num == 1:
                 async with session.get('https://api.thecatapi.com/v1/images/search', timeout=aiohttp.ClientTimeout(total=5)) as resp:
                     data = await resp.json()
@@ -379,7 +379,7 @@ async def random_pet(interaction: discord.Interaction):
                     embed = discord.Embed(title='🐶 Random Pet!', color=0xFF69B4, timestamp=datetime.utcnow())
                     embed.set_image(url=data[0]['url'])
                     await interaction.followup.send(embed=embed)
-     except:
+    except:
         await interaction.followup.send('Failed to fetch a pet picture 😥')
 
 @bot.tree.command(name='joke', description='Get a random joke')
