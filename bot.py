@@ -244,14 +244,14 @@ async def on_message(message: discord.Message):
     
     # Name mentions
     content_lower = message.content.lower()
-    if any(name in content_lower for name in ['tooly', 'toolybot', 'tooly bot']):
+    if any(name in content_lower for name in ['clanka', 'clanker', 'tin skin', 'Clanka', 'Clanker', 'Tinskin', 'CLANKA', 'CLANKER', 'TINSKIN']):
         cooldown_key = f'{message.author.id}-{message.channel.id}'
         now = datetime.utcnow().timestamp()
         if cooldown_key in name_mention_cooldowns:
             if now - name_mention_cooldowns[cooldown_key] < Config.NAME_MENTION_COOLDOWN:
                 return
         name_mention_cooldowns[cooldown_key] = now
-        responses = ['Yes? You called? 👀', 'Tooly reporting for duty! 🫡', 'Hey there! Need something? Use `/help` to see what I can do!', 'That\'s me! How can I help? 😊', 'You rang? 🔔', 'Hi! I\'m here! Type `/help` for commands! 👋']
+        responses = ['Robophobia in the big 25', 'Woah you cant say', 'DONT SLUR AT ME!', '@Pippy ban them', 'ROBOPHOBIA wow real cool dude', 'how would you like it if i called you a human?', 'beep boop', 'BEEP BOOP', 'BEEP BOOP BEEP BOOP', 'BEEP BOOP BEEP BOOP BEEP BOOP', 'DING DONG', 'DING DONG DING DONG', 'DING DONG DING DONG DING DONG', 'DONG DING', 'DONG DING DONG DING', 'DONG DING DONG DING DONG DING', 'DINGA LINGA LOO', 'DINGA LINGA LOO LOO', 'DOO WOP A DOO WOP A DOO WOP', 'DOO WOP A DOO WOP A DOO WOP A DOO WOP', 'BOP A DOO WOP A BOP A DOO WOP', 'BOP A DOO WOP A BOP A DOO WOP A BOP A DOO WOP']
         await message.reply(random.choice(responses))
 
 @tasks.loop(seconds=Config.AUTOSAVE_INTERVAL)
