@@ -400,32 +400,61 @@ async def roll(interaction: discord.Interaction):
     await interaction.response.send_message(f'🎲 You rolled a **{result}**!')
 
 
-@bot.tree.command(name='lyrics', description='Search for song lyrics')
+@bot.tree.command(name='music', description='Search for a song')
 @app_commands.describe(song='Song name', artist='Artist name')
-async def lyrics(interaction: discord.Interaction, song: str, artist: str):
+async def music(interaction: discord.Interaction, song: str, artist: str):
     await interaction.response.defer()
     try:
-        # Format for AZLyrics URL
-        song_clean = song.lower().replace(' ', '')
-        artist_clean = artist.lower().replace(' ', '')
-        url = f'https://www.azlyrics.com/lyrics/{artist_clean}/{song_clean}.html'
+        search_query = f'{artist} {song}'
         
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                if resp.status == 200:
-                    embed = discord.Embed(
-                        title=f'🎵 {song}',
-                        description=f'by {artist}',
-                        color=0xFF69B4,
-                        url=url,
-                        timestamp=datetime.utcnow()
-                    )
-                    embed.add_field(name='View Lyrics', value=f'[Click here]({url})', inline=False)
-                    await interaction.followup.send(embed=embed)
-                else:
-                    await interaction.followup.send('Song not found 😥')
-    except:
-        await interaction.followup.send('Failed to find lyrics 😥')
+            # Get album art and info from iTunes
+            itunes_url = 'https://itunes.apple.com/search'
+            params = {'term': search_query, 'media': 'music', 'entity': 'song', 'limit': 1}
+            async with session.get(itunes_url, params=params) as itunes_resp:
+                itunes_data = await itunes_resp.json()
+            
+            # Search YouTube for official music video
+            youtube_query = f'{artist} {song} official music video'.replace(' ', '+')
+            youtube_search_url = f'https://www.youtube.com/results?search_query={youtube_query}'
+            
+            # Lyrics link
+            song_clean = song.lower().replace(' ', '').replace("'", '').replace('.', '').replace(',', '')
+            artist_clean = artist.lower().replace(' ', '').replace("'", '').replace('.', '').replace(',', '')
+            lyrics_url = f'https://www.azlyrics.com/lyrics/{artist_clean}/{song_clean}.html'
+            
+            embed = discord.Embed(
+                title=f'{song}',
+                description=f'by **{artist}**',
+                color=0xFF69B4,
+                timestamp=datetime.utcnow()
+            )
+            
+            # Add album art and info if found
+            if itunes_data.get('results') and len(itunes_data['results']) > 0:
+                result = itunes_data['results'][0]
+                album_art = result.get('artworkUrl100', '').replace('100x100', '600x600')
+                embed.set_thumbnail(url=album_art)
+                if result.get('collectionName'):
+                    embed.add_field(name='Album', value=result['collectionName'], inline=True)
+                if result.get('releaseDate'):
+                    year = result['releaseDate'][:4]
+                    embed.add_field(name='Year', value=year, inline=True)
+                if result.get('trackTimeMillis'):
+                    duration = result['trackTimeMillis'] // 1000
+                    minutes = duration // 60
+                    seconds = duration % 60
+                    embed.add_field(name='Duration', value=f'{minutes}:{seconds:02d}', inline=True)
+            
+            embed.add_field(name='Watch on YouTube', value=f'[Search for music video]({youtube_search_url})', inline=False)
+            embed.add_field(name='Read Lyrics', value=f'[View on AZLyrics]({lyrics_url})', inline=False)
+            embed.set_footer(text=f'Requested by {interaction.user.name}')
+            
+            await interaction.followup.send(embed=embed)
+            
+    except Exception as e:
+        logger.error(f'Music search error: {e}')
+        await interaction.followup.send('Failed to find song info')
 
 @bot.tree.command(name='flip', description='Flip a coin')
 async def flip(interaction: discord.Interaction):
