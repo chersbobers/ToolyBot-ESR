@@ -793,7 +793,7 @@ async def botinfo(interaction: discord.Interaction):
     embed.add_field(name='📅 Created', value=bot.user.created_at.strftime('%Y-%m-%d'), inline=True)
     embed.add_field(name='💻 Server', value=("RENDER"), inline=True)
     embed.add_field(name='🅿 Python ver', value=("Discord.py 2.3.2 on python 3.11.1"), inline=True)
-    embed.add_field(name='<:tooly:1364760067706191882> Tooly ver', value=("beta 1.0 "), inline=True)
+    embed.add_field(name='<:tooly:1364760067706191882> Tooly build', value=("beta 1.1"), inline=True)
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name='userinfo', description='Show user information')
@@ -862,14 +862,9 @@ async def roll(interaction: discord.Interaction):
 async def music(interaction: discord.Interaction, song: str, artist: str):
     await interaction.response.defer()
     try:
-        search_query = f'{artist} {song}'
-        
+        #search_query = f'{artist} {song}'
+
         async with aiohttp.ClientSession() as session:
-            # Get album art and info from iTunes
-            itunes_url = 'https://itunes.apple.com/search'
-            params = {'term': search_query, 'media': 'music', 'entity': 'song', 'limit': 1}
-            async with session.get(itunes_url, params=params) as itunes_resp:
-                itunes_data = await itunes_resp.json()
             
             # Search YouTube for official music video
             youtube_query = f'{artist} {song} official music video'.replace(' ', '+')
@@ -981,21 +976,35 @@ async def random_pet(interaction: discord.Interaction):
 async def image(interaction: discord.Interaction, query: str):
     await interaction.response.defer()
     try:
-        # Follow the redirect to get the actual image URL
-        url = f'https://api.unsplash.com/search/photos?query={query}'
-        
+        # Pexels API image search
+        PEXELS_API_KEY = os.getenv('PEXELS_API_KEY')
+        if not PEXELS_API_KEY:
+            await interaction.followup.send('Pexels API key not set. Please set PEXELS_API_KEY in your environment.')
+            return
+
+        url = f'https://api.pexels.com/v1/search?query={query}&per_page=1'
+        headers = {'Authorization': PEXELS_API_KEY}
+
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                actual_url = str(response.url)  # Get the final URL after redirect
-        
+            async with session.get(url, headers=headers) as response:
+                data = await response.json()
+                if not data.get('photos'):
+                    await interaction.followup.send('No images found for your query.')
+                    return
+                photo = data['photos'][0]
+                image_url = photo['src']['large']
+                photographer = photo.get('photographer', 'Unknown')
+                photographer_url = photo.get('photographer_url', '')
+
         embed = discord.Embed(
-            title=f'🔍 {query}', 
-            color=0xFF69B4, 
-            timestamp=datetime.utcnow()
+            title=f'🔍 {query}',
+            color=0xFF69B4,
+            timestamp=datetime.utcnow(),
+            description=f'Photo by [{photographer}]({photographer_url}) on Pexels'
         )
-        embed.set_image(url=actual_url)
-        embed.set_footer(text=f'Requested by {interaction.user.name} • Powered by Unsplash')
-        
+        embed.set_image(url=image_url)
+        embed.set_footer(text=f'Requested by {interaction.user.name} • Powered by Pexels')
+
         await interaction.followup.send(embed=embed)
     except Exception as e:
         logger.error(f'Image search error: {e}')
