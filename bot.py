@@ -152,7 +152,7 @@ async def start_web_server():
 @bot.event
 async def on_ready():
     logger.info(f'Logged in as {bot.user}')
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="you for /help to be typed"))
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=" for /help to be typed"))
     try:
         synced = await bot.tree.sync()
         logger.info(f'Synced {len(synced)} commands')
