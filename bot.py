@@ -8,7 +8,7 @@ import aiohttp
 import feedparser
 from datetime import datetime, timedelta
 import re
-from typing import Optional
+from typing import Optional, Tuple, List  # Add Tuple, List for AutoMod type hints
 import logging
 import random
 from duckduckgo_search import DDGS
@@ -96,31 +96,158 @@ def save_server_settings(settings):
     with open(Config.SETTINGS_FILE, 'w') as f:
         json.dump(settings, f, indent=2)
 
+def get_shop_items(bot_data):
+    """Get all shop items"""
+    if 'shop_items' not in bot_data.data:
+        bot_data.data['shop_items'] = {}
+    return bot_data.data['shop_items']
+
+def get_user_inventory(bot_data, user_id: str):
+    """Get user's purchased items"""
+    if 'inventory' not in bot_data.data:
+        bot_data.data['inventory'] = {}
+    return bot_data.data['inventory'].get(user_id, {})
+
+def add_to_inventory(bot_data, user_id: str, item_id: str):
+    """Add item to user's inventory"""
+    if 'inventory' not in bot_data.data:
+        bot_data.data['inventory'] = {}
+    if user_id not in bot_data.data['inventory']:
+        bot_data.data['inventory'][user_id] = {}
+    
+    bot_data.data['inventory'][user_id][item_id] = {
+        'purchased': datetime.utcnow().timestamp()
+    }
 
 class AutoMod:
+    """Enhanced AutoMod with multiple detection methods"""
+    
     @staticmethod
     def normalize_text(text: str) -> str:
+        """Normalize text for pattern matching"""
         normalized = text.lower()
         normalized = re.sub(r'\s+', '', normalized)
         normalized = re.sub(r'[^a-z0-9]', '', normalized)
-        replacements = {'0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b'}
+        replacements = {
+            '0': 'o', '1': 'i', '3': 'e', '4': 'a', 
+            '5': 's', '7': 't', '8': 'b', '@': 'a',
+            '$': 's', '!': 'i', '9': 'g'
+        }
         for old, new in replacements.items():
             normalized = normalized.replace(old, new)
         return normalized
     
     @staticmethod
-    def check_inappropriate(content: str) -> bool:
-        normalized = AutoMod.normalize_text(content)
-        blocked_patterns = [
-            r'n[il]+[gq]+[ea]+r',
-            r'n[il]+[gq]+[a]+',
-            r'f[a]+[gq]+[gq]?[o]+[t]',
-            r'r[e]+[t]+[a]+r?d',
-            r'k[il]+k[e]+',
+    def check_inappropriate(content: str) -> Tuple[bool, List[str]]:
+        """
+        Check for inappropriate content using multiple methods
+        Returns: (is_blocked, list_of_reasons)
+        """
+        reasons = []
+        
+        # Check 1: Spam detection
+        if AutoMod._check_spam(content):
+            reasons.append("spam")
+        
+        # Check 2: Excessive caps/aggression
+        if AutoMod._check_aggressive_formatting(content):
+            reasons.append("aggressive_formatting")
+        
+        # Check 3: Unauthorized invites
+        if AutoMod._check_invites(content):
+            reasons.append("unauthorized_invite")
+        
+        # Check 4: PII exposure (protect users)
+        if AutoMod._check_pii(content):
+            reasons.append("personal_information")
+        
+        # Check 5: Excessive mentions
+        if AutoMod._check_mass_mentions(content):
+            reasons.append("mass_mentions")
+        
+        # Return True if any reason was flagged
+        return len(reasons) > 0, reasons
+    
+    @staticmethod
+    def _check_spam(content: str) -> bool:
+        """Detect spam patterns"""
+        # Multiple URLs
+        url_count = len(re.findall(r'https?://\S+', content))
+        if url_count >= 3:
+            return True
+        
+        # Excessive character repetition
+        if re.search(r'(.)\1{10,}', content):
+            return True
+        
+        # Common spam phrases
+        spam_patterns = [
+            r'(?i)(buy|click|subscribe|follow).{0,20}(now|here|link)',
+            r'(?i)(free|win|prize).{0,30}(click|link|here)',
         ]
-        for pattern in blocked_patterns:
-            if re.search(pattern, normalized, re.IGNORECASE):
+        for pattern in spam_patterns:
+            if re.search(pattern, content):
                 return True
+        
+        return False
+    
+    @staticmethod
+    def _check_aggressive_formatting(content: str) -> bool:
+        """Check for aggressive formatting"""
+        if len(content) < 10:
+            return False
+        
+        # Excessive caps (>70% uppercase)
+        caps_ratio = sum(1 for c in content if c.isupper()) / len(content)
+        if caps_ratio > 0.7:
+            return True
+        
+        # Excessive punctuation
+        punct_count = len(re.findall(r'[!?]{3,}', content))
+        if punct_count >= 2:
+            return True
+        
+        return False
+    
+    @staticmethod
+    def _check_invites(content: str) -> bool:
+        """Check for Discord invite links"""
+        invite_patterns = [
+            r'discord\.gg/[a-zA-Z0-9]+',
+            r'discord\.com/invite/[a-zA-Z0-9]+',
+            r'discordapp\.com/invite/[a-zA-Z0-9]+'
+        ]
+        for pattern in invite_patterns:
+            if re.search(pattern, content, re.IGNORECASE):
+                return True
+        return False
+    
+    @staticmethod
+    def _check_pii(content: str) -> bool:
+        """Detect personal information to protect users"""
+        pii_patterns = [
+            r'\b\d{3}-\d{2}-\d{4}\b',  # SSN
+            r'\b\d{16}\b',  # Credit card
+            r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b',  # Phone number
+            r'\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b',  # Email (common pattern)
+        ]
+        for pattern in pii_patterns:
+            if re.search(pattern, content, re.IGNORECASE):
+                return True
+        return False
+    
+    @staticmethod
+    def _check_mass_mentions(content: str) -> bool:
+        """Check for mass mentions"""
+        # Check for @everyone or @here
+        if re.search(r'@(everyone|here)', content, re.IGNORECASE):
+            return True
+        
+        # Check for excessive user mentions (>5)
+        mention_count = len(re.findall(r'<@!?\d+>', content))
+        if mention_count > 5:
+            return True
+        
         return False
 
 intents = discord.Intents.default()
@@ -184,7 +311,7 @@ Use `/help` to see all commands!"""
 async def on_message(message: discord.Message):
     if message.author.bot:
         return
-    
+
     # Handle DMs
     if isinstance(message.channel, discord.DMChannel):
         dm_log_channel_id = os.getenv('DM_LOG_CHANNEL_ID')
@@ -195,42 +322,91 @@ async def on_message(message: discord.Message):
                 embed.set_footer(text=f'From: {message.author} ({message.author.id})')
                 await channel.send(embed=embed)
         return
-    
+
     # Automod
     automod_enabled = os.getenv('AUTOMOD_ENABLED', 'true').lower() == 'true'
-    if automod_enabled and AutoMod.check_inappropriate(message.content):
-        try:
-            await message.delete()
-            user_id = str(message.author.id)
-            warning = {'reason': 'Automod: Inappropriate language detected', 'mod': str(bot.user.id), 'timestamp': datetime.utcnow().timestamp()}
-            bot_data.add_warning(user_id, warning)
-            bot_data.save()
-            warnings = bot_data.get_warnings(user_id)
-            warn_count = len(warnings)
-            warn_msg = await message.channel.send(f'⚠️ {message.author.mention}, your message was removed for inappropriate content. Warning {warn_count}/{Config.WARN_THRESHOLD}')
-            await asyncio.sleep(5)
-            await warn_msg.delete()
-            if warn_count >= Config.WARN_THRESHOLD:
-                try:
-                    duration = timedelta(minutes=Config.TIMEOUT_DURATION)
-                    await message.author.timeout(duration, reason=f'Automod: {Config.WARN_THRESHOLD} warnings reached')
-                    await message.channel.send(f'🔇 {message.author.mention} has been timed out for {Config.TIMEOUT_DURATION} minutes due to repeated violations.')
-                except:
-                    pass
-            log_channel_id = os.getenv('AUTOMOD_LOG_CHANNEL')
-            if log_channel_id:
-                log_channel = bot.get_channel(int(log_channel_id))
-                if log_channel:
-                    embed = discord.Embed(title='🛡️ Automod Action', color=0xFF0000, timestamp=datetime.utcnow())
-                    embed.add_field(name='User', value=f'{message.author} ({message.author.id})', inline=True)
-                    embed.add_field(name='Channel', value=message.channel.mention, inline=True)
-                    embed.add_field(name='Content', value=f'||{message.content[:200]}||', inline=False)
-                    embed.add_field(name='Warnings', value=f'{warn_count}/{Config.WARN_THRESHOLD}', inline=True)
-                    await log_channel.send(embed=embed)
-        except Exception as e:
-            logger.error(f'Automod error: {e}')
-        return
-    
+    if automod_enabled:
+        is_blocked, reasons = AutoMod.check_inappropriate(message.content)
+        if is_blocked:
+            try:
+                await message.delete()
+                user_id = str(message.author.id)
+
+                # Create detailed warning message
+                reason_text = ', '.join(reasons)
+                warning = {
+                    'reason': f'Automod: {reason_text}',
+                    'mod': str(bot.user.id),
+                    'timestamp': datetime.utcnow().timestamp()
+                }
+                bot_data.add_warning(user_id, warning)
+                bot_data.save()
+
+                warnings = bot_data.get_warnings(user_id)
+                warn_count = len(warnings)
+
+                warn_msg = await message.channel.send(
+                    f'⚠️ {message.author.mention}, your message was removed. '
+                    f'Reason: {reason_text}. Warning {warn_count}/{Config.WARN_THRESHOLD}'
+                )
+                await asyncio.sleep(5)
+                await warn_msg.delete()
+
+                # Timeout if threshold reached
+                if warn_count >= Config.WARN_THRESHOLD:
+                    try:
+                        duration = timedelta(minutes=Config.TIMEOUT_DURATION)
+                        await message.author.timeout(
+                            duration,
+                            reason=f'Automod: {Config.WARN_THRESHOLD} warnings reached'
+                        )
+                        await message.channel.send(
+                            f'🔇 {message.author.mention} has been timed out for '
+                            f'{Config.TIMEOUT_DURATION} minutes due to repeated violations.'
+                        )
+                    except Exception as e:
+                        logger.error(f'Failed to timeout user: {e}')
+
+                # Log to moderation channel
+                log_channel_id = os.getenv('AUTOMOD_LOG_CHANNEL')
+                if log_channel_id:
+                    log_channel = bot.get_channel(int(log_channel_id))
+                    if log_channel:
+                        embed = discord.Embed(
+                            title='🛡️ Automod Action',
+                            color=0xFF0000,
+                            timestamp=datetime.utcnow()
+                        )
+                        embed.add_field(
+                            name='User',
+                            value=f'{message.author} ({message.author.id})',
+                            inline=True
+                        )
+                        embed.add_field(
+                            name='Channel',
+                            value=message.channel.mention,
+                            inline=True
+                        )
+                        embed.add_field(
+                            name='Violation Type',
+                            value=reason_text,
+                            inline=False
+                        )
+                        embed.add_field(
+                            name='Content',
+                            value=f'||{message.content[:200]}||',
+                            inline=False
+                        )
+                        embed.add_field(
+                            name='Warnings',
+                            value=f'{warn_count}/{Config.WARN_THRESHOLD}',
+                            inline=True
+                        )
+                        await log_channel.send(embed=embed)
+            except Exception as e:
+                logger.error(f'Automod error: {e}')
+            return
+
     # XP system
     user_id = str(message.author.id)
     user_data = bot_data.get_user_level(user_id)
@@ -256,18 +432,28 @@ async def on_message(message: discord.Message):
             await message.channel.send(f'{random.choice(messages)} You earned **{coin_reward} coins**! 💰')
         bot_data.set_user_level(user_id, user_data)
         bot_data.save()
-    
+
     # Name mentions
     content_lower = message.content.lower()
-    if any(name in content_lower for name in ['clanka', 'clanker', 'tinskin', 'Clanka', 'Clanker', 'Tinskin', 'CLANKA', 'CLANKER', 'TINSKIN']):
+    if any(name.lower() in content_lower for name in ['clanka', 'clanker', 'tinskin']):
         cooldown_key = f'{message.author.id}-{message.channel.id}'
         now = datetime.utcnow().timestamp()
         if cooldown_key in name_mention_cooldowns:
             if now - name_mention_cooldowns[cooldown_key] < Config.NAME_MENTION_COOLDOWN:
                 return
         name_mention_cooldowns[cooldown_key] = now
-        responses = ['Robophobia in the big 25', 'Woah you cant say', 'DONT SLUR AT ME!', '@Pippy ban them', 'ROBOPHOBIA wow real cool dude', 'how would you like it if i called you a human?', 'beep boop', 'BEEP BOOP', 'BEEP BOOP BEEP BOOP', 'BEEP BOOP BEEP BOOP BEEP BOOP', 'DING DONG', 'DING DONG DING DONG', 'DING DONG DING DONG DING DONG', 'DONG DING', 'DONG DING DONG DING', 'DONG DING DONG DING DONG DING', 'DINGA LINGA LOO', 'DINGA LINGA LOO LOO', 'DOO WOP A DOO WOP A DOO WOP', 'DOO WOP A DOO WOP A DOO WOP A DOO WOP', 'BOP A DOO WOP A BOP A DOO WOP', 'BOP A DOO WOP A BOP A DOO WOP A BOP A DOO WOP']
+        responses = [
+            'Robophobia in the big 25', 'Woah you cant say', 'DONT SLUR AT ME!', '@Pippy ban them',
+            'ROBOPHOBIA wow real cool dude', 'how would you like it if i called you a human?', 'beep boop',
+            'BEEP BOOP', 'BEEP BOOP BEEP BOOP', 'BEEP BOOP BEEP BOOP BEEP BOOP', 'DING DONG',
+            'DING DONG DING DONG', 'DING DONG DING DONG DING DONG', 'DONG DING', 'DONG DING DONG DING',
+            'DONG DING DONG DING DONG DING', 'DINGA LINGA LOO', 'DINGA LINGA LOO LOO',
+            'DOO WOP A DOO WOP A DOO WOP', 'DOO WOP A DOO WOP A DOO WOP A DOO WOP',
+            'BOP A DOO WOP A BOP A DOO WOP', 'BOP A DOO WOP A BOP A DOO WOP A BOP A DOO WOP'
+        ]
         await message.reply(random.choice(responses))
+
+    await bot.process_commands(message)  # Ensure commands work with on_message
 
 @tasks.loop(seconds=Config.AUTOSAVE_INTERVAL)
 async def autosave():
@@ -308,6 +494,275 @@ async def check_videos():
             bot_data.save()
     except Exception as e:
         logger.error(f'Error checking videos: {e}')
+
+# ============ ADMIN COMMANDS - CREATE ITEMS ============
+
+@bot.tree.command(name='createitem', description='[ADMIN] Create a new shop item')
+@app_commands.describe(
+    item_id='Unique ID for the item (e.g., vip_role)',
+    name='Display name',
+    price='Price in coins',
+    description='Item description',
+    emoji='Emoji for the item',
+    item_type='Type: role, badge, or consumable',
+    role_id='Role ID (only for role type items)'
+)
+@app_commands.default_permissions(administrator=True)
+async def createitem(
+    interaction: discord.Interaction,
+    item_id: str,
+    name: str,
+    price: int,
+    description: str,
+    emoji: str,
+    item_type: str,
+    role_id: Optional[str] = None
+):
+    """Admin TUI for creating shop items"""
+    
+    # Validate inputs
+    if price < 1:
+        await interaction.response.send_message('❌ Price must be at least 1 coin!', ephemeral=True)
+        return
+    
+    if item_type not in ['role', 'badge', 'consumable']:
+        await interaction.response.send_message('❌ Item type must be: role, badge, or consumable', ephemeral=True)
+        return
+    
+    if item_type == 'role' and not role_id:
+        await interaction.response.send_message('❌ Role items require a role_id!', ephemeral=True)
+        return
+    
+    # Check if item already exists
+    shop_items = get_shop_items(bot_data)
+    if item_id in shop_items:
+        await interaction.response.send_message(f'❌ Item with ID `{item_id}` already exists!', ephemeral=True)
+        return
+    
+    # Create item
+    shop_items[item_id] = {
+        'name': name[:100],
+        'description': description[:200],
+        'price': price,
+        'emoji': emoji[:10],
+        'type': item_type,
+        'role_id': role_id,
+        'created': datetime.utcnow().timestamp(),
+        'creator': str(interaction.user.id)
+    }
+    
+    bot_data.data['shop_items'] = shop_items
+    bot_data.save()
+    
+    # Success embed
+    embed = discord.Embed(
+        title='✅ Item Created Successfully',
+        color=0x00FF00,
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(name='ID', value=f'`{item_id}`', inline=True)
+    embed.add_field(name='Name', value=name, inline=True)
+    embed.add_field(name='Price', value=f'{price} coins', inline=True)
+    embed.add_field(name='Type', value=item_type, inline=True)
+    embed.add_field(name='Emoji', value=emoji, inline=True)
+    if role_id:
+        embed.add_field(name='Role ID', value=role_id, inline=True)
+    embed.add_field(name='Description', value=description, inline=False)
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name='deleteitem', description='[ADMIN] Delete a shop item')
+@app_commands.describe(item_id='ID of item to delete')
+@app_commands.default_permissions(administrator=True)
+async def deleteitem(interaction: discord.Interaction, item_id: str):
+    """Delete a shop item"""
+    
+    shop_items = get_shop_items(bot_data)
+    
+    if item_id not in shop_items:
+        await interaction.response.send_message(f'❌ Item `{item_id}` not found!', ephemeral=True)
+        return
+    
+    item = shop_items[item_id]
+    del shop_items[item_id]
+    bot_data.data['shop_items'] = shop_items
+    bot_data.save()
+    
+    await interaction.response.send_message(f'✅ Deleted item: **{item["name"]}** (`{item_id}`)')
+
+@bot.tree.command(name='listitems', description='[ADMIN] List all shop items with IDs')
+@app_commands.default_permissions(administrator=True)
+async def listitems(interaction: discord.Interaction):
+    """Admin view of all items"""
+    
+    shop_items = get_shop_items(bot_data)
+    
+    if not shop_items:
+        await interaction.response.send_message('📦 No items in shop yet. Use `/createitem` to add some!', ephemeral=True)
+        return
+    
+    embed = discord.Embed(
+        title='📋 All Shop Items (Admin View)',
+        color=0x9B59B6,
+        timestamp=datetime.utcnow()
+    )
+    
+    for item_id, item in shop_items.items():
+        field_value = f"**Price:** {item['price']} coins\n**Type:** {item['type']}\n**Description:** {item['description']}"
+        if item.get('role_id'):
+            field_value += f"\n**Role ID:** {item['role_id']}"
+        
+        embed.add_field(
+            name=f"{item['emoji']} {item['name']} (`{item_id}`)",
+            value=field_value,
+            inline=False
+        )
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+# ============ USER COMMANDS - BUY ITEMS ============
+
+@bot.tree.command(name='shop', description='Browse the shop')
+async def shop(interaction: discord.Interaction):
+    """User TUI for browsing shop"""
+    
+    shop_items = get_shop_items(bot_data)
+    
+    if not shop_items:
+        await interaction.response.send_message('🛒 The shop is empty right now. Check back later!')
+        return
+    
+    embed = discord.Embed(
+        title='🛒 Tooly Shop',
+        description='Purchase items with your coins!\nUse `/buy <item_id>` to purchase an item.',
+        color=0xFF69B4,
+        timestamp=datetime.utcnow()
+    )
+    
+    # Group by type
+    roles = {k: v for k, v in shop_items.items() if v['type'] == 'role'}
+    badges = {k: v for k, v in shop_items.items() if v['type'] == 'badge'}
+    consumables = {k: v for k, v in shop_items.items() if v['type'] == 'consumable'}
+    
+    if roles:
+        role_text = '\n'.join([
+            f"{item['emoji']} **{item['name']}** - {item['price']} coins\n└ {item['description']}\n└ ID: `{item_id}`"
+            for item_id, item in roles.items()
+        ])
+        embed.add_field(name='👑 Roles', value=role_text, inline=False)
+    
+    if badges:
+        badge_text = '\n'.join([
+            f"{item['emoji']} **{item['name']}** - {item['price']} coins\n└ {item['description']}\n└ ID: `{item_id}`"
+            for item_id, item in badges.items()
+        ])
+        embed.add_field(name='🏆 Badges', value=badge_text, inline=False)
+    
+    if consumables:
+        consumable_text = '\n'.join([
+            f"{item['emoji']} **{item['name']}** - {item['price']} coins\n└ {item['description']}\n└ ID: `{item_id}`"
+            for item_id, item in consumables.items()
+        ])
+        embed.add_field(name='✨ Consumables', value=consumable_text, inline=False)
+    
+    # Show user's balance
+    user_id = str(interaction.user.id)
+    economy_data = bot_data.get_user_economy(user_id)
+    embed.set_footer(text=f'Your balance: {economy_data["coins"]} coins | Use /inventory to see owned items')
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name='buy', description='Purchase an item from the shop')
+@app_commands.describe(item_id='Item ID to purchase (see /shop)')
+async def buy(interaction: discord.Interaction, item_id: str):
+    """User TUI for buying items"""
+    
+    shop_items = get_shop_items(bot_data)
+    
+    # Check if item exists
+    if item_id not in shop_items:
+        await interaction.response.send_message('❌ Invalid item ID! Use `/shop` to see available items.', ephemeral=True)
+        return
+    
+    item = shop_items[item_id]
+    user_id = str(interaction.user.id)
+    
+    # Check if already owned (except consumables)
+    inventory = get_user_inventory(bot_data, user_id)
+    if item_id in inventory and item['type'] != 'consumable':
+        await interaction.response.send_message(f'❌ You already own **{item["name"]}**!', ephemeral=True)
+        return
+    
+    # Check balance
+    economy_data = bot_data.get_user_economy(user_id)
+    if economy_data['coins'] < item['price']:
+        needed = item['price'] - economy_data['coins']
+        await interaction.response.send_message(
+            f'❌ You need **{needed}** more coins to buy **{item["name"]}**!\nYou have: {economy_data["coins"]} coins',
+            ephemeral=True
+        )
+        return
+    
+    # Process purchase
+    economy_data['coins'] -= item['price']
+    bot_data.set_user_economy(user_id, economy_data)
+    add_to_inventory(bot_data, user_id, item_id)
+    bot_data.save()
+    
+    # Handle role items
+    if item['type'] == 'role' and item.get('role_id'):
+        try:
+            role = interaction.guild.get_role(int(item['role_id']))
+            if role:
+                await interaction.user.add_roles(role)
+        except Exception as e:
+            logger.error(f'Error adding role: {e}')
+    
+    # Success message
+    embed = discord.Embed(
+        title='✅ Purchase Successful!',
+        description=f'You purchased **{item["name"]}**!',
+        color=0x00FF00,
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(name='Item', value=f"{item['emoji']} {item['name']}", inline=True)
+    embed.add_field(name='Price', value=f'{item["price"]} coins', inline=True)
+    embed.add_field(name='Remaining Balance', value=f'{economy_data["coins"]} coins', inline=True)
+    
+    if item['type'] == 'role':
+        embed.add_field(name='Role Added', value='Check your profile!', inline=False)
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name='inventory', description='View your purchased items')
+async def inventory(interaction: discord.Interaction):
+    """View user inventory"""
+    
+    user_id = str(interaction.user.id)
+    inventory = get_user_inventory(bot_data, user_id)
+    shop_items = get_shop_items(bot_data)
+    
+    if not inventory:
+        await interaction.response.send_message('📦 Your inventory is empty! Visit `/shop` to buy items.')
+        return
+    
+    embed = discord.Embed(
+        title=f'📦 {interaction.user.name}\'s Inventory',
+        color=0x9B59B6,
+        timestamp=datetime.utcnow()
+    )
+    
+    for item_id, purchase_data in inventory.items():
+        if item_id in shop_items:
+            item = shop_items[item_id]
+            purchased_date = datetime.fromtimestamp(purchase_data['purchased']).strftime('%Y-%m-%d')
+            embed.add_field(
+                name=f"{item['emoji']} {item['name']}",
+                value=f"{item['description']}\nPurchased: {purchased_date}",
+                inline=False
+            )
+    
+    await interaction.response.send_message(embed=embed)
 
 # ============ INFO COMMANDS ============
 @bot.tree.command(name='ping', description='Check bot latency')
