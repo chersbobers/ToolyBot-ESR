@@ -726,7 +726,7 @@ async def botinfo(interaction: discord.Interaction):
     
     embed = discord.Embed(
         title='<:tooly:1364760067706191882> Tooly Bot Information',
-        description='A feature-rich Discord bot with leveling, economy, moderation, and more!',
+        description='A free opensource bot!',
         color=0x9B59B6,
         timestamp=datetime.utcnow()
     )
@@ -737,7 +737,7 @@ async def botinfo(interaction: discord.Interaction):
     embed.add_field(name='📅 Created', value=bot.user.created_at.strftime('%Y-%m-%d'), inline=True)
     
     # Version Info
-    embed.add_field(name='<:tooly:1364760067706191882> Tooly Version', value='Beta 1.3 (Enhanced)', inline=True)
+    embed.add_field(name='<:tooly:1364760067706191882> Tooly Version', value='Beta 1.3 (FISH UPD)', inline=True)
     embed.add_field(name='🐍 Python', value=f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}', inline=True)
     embed.add_field(name='📚 Discord.py', value=discord.__version__, inline=True)
     
@@ -766,7 +766,7 @@ async def botinfo(interaction: discord.Interaction):
     embed.add_field(name='🏓 Latency', value=f'{round(bot.latency * 1000)}ms', inline=True)
     embed.add_field(name='⏰ Uptime', value='Check /ping', inline=True)
     
-    embed.set_footer(text='Made with ❤️ by the Tooly Bot team | Use /help for commands')
+    embed.set_footer(text='Made with ❤️ by Chersbobers| Use /help for commands')
     
     if bot.user.avatar:
         embed.set_thumbnail(url=bot.user.avatar.url)
