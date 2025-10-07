@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Free](https://img.shields.io/badge/Free-100%25-success)](https://github.com/chersbobers/ToolyBot)
 [![Open Source](https://img.shields.io/badge/Open%20Source-%E2%9D%A4-red)](https://github.com/chersbobers/ToolyBot)
-A completely free and open source Discord bot with leveling, economy, fishing, moderation, and more. Self-host it, customize it, make it yours.
+<br>- A completely free and open source Discord bot with leveling, economy, fishing, moderation, and more. Self-host it, customize it, make it yours.
 
 ## Features
 
