@@ -153,7 +153,122 @@ class Economy(commands.Cog):
 
         await ctx.respond(embed=embed)
 
-    # ... (keep daily, work, shop, inventory, give as-is)
+    @discord.slash_command(name='daily', description='Claim your daily reward')
+    async def daily(self, ctx):
+        user_id = str(ctx.author.id)
+        economy_data = bot_data.get_user_economy(user_id)
+        now = datetime.utcnow().timestamp()
+
+        if now - economy_data.get('lastDaily', 0) < Config.DAILY_COOLDOWN:
+            time_left = Config.DAILY_COOLDOWN - (now - economy_data.get('lastDaily', 0))
+            hours = int(time_left // 3600)
+            minutes = int((time_left % 3600) // 60)
+            await ctx.respond(
+                f'⏳ You already claimed your daily! Come back in **{hours}h {minutes}m**',
+                ephemeral=True
+            )
+            return
+
+        reward = random.randint(Config.DAILY_MIN, Config.DAILY_MAX)
+        economy_data['coins'] += reward
+        economy_data['lastDaily'] = now
+        bot_data.set_user_economy(user_id, economy_data)
+        bot_data.save()
+
+        embed = discord.Embed(
+            title='🎁 Daily Reward Claimed!',
+            description=f'You received **{reward:,} coins**!',
+            color=0x00FF00,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='New Balance', value=f'{economy_data["coins"]:,} coins', inline=False)
+        await ctx.respond(embed=embed)
+
+    @discord.slash_command(name='work', description='Work for coins')
+    async def work(self, ctx):
+        user_id = str(ctx.author.id)
+        economy_data = bot_data.get_user_economy(user_id)
+        now = datetime.utcnow().timestamp()
+
+        if now - economy_data.get('lastWork', 0) < Config.WORK_COOLDOWN:
+            time_left = Config.WORK_COOLDOWN - (now - economy_data.get('lastWork', 0))
+            minutes = int(time_left // 60)
+            await ctx.respond(
+                f'⏳ You need to rest! Come back in **{minutes}m**',
+                ephemeral=True
+            )
+            return
+
+        jobs = [
+            'programmer', 'chef', 'teacher', 'doctor', 'artist',
+            'musician', 'writer', 'engineer', 'designer', 'scientist'
+        ]
+        job = random.choice(jobs)
+        reward = random.randint(Config.WORK_MIN, Config.WORK_MAX)
+        economy_data['coins'] += reward
+        economy_data['lastWork'] = now
+        bot_data.set_user_economy(user_id, economy_data)
+        bot_data.save()
+
+        embed = discord.Embed(
+            title=f'💼 You worked as a {job}!',
+            description=f'You earned **{reward:,} coins**!',
+            color=0x3498DB,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='New Balance', value=f'{economy_data["coins"]:,} coins', inline=False)
+        await ctx.respond(embed=embed)
+
+    @discord.slash_command(name='shop', description='Browse the shop')
+    async def shop(self, ctx):
+        shop_items = bot_data.get_shop_items()
+
+        if not shop_items:
+            await ctx.respond('🛒 The shop is empty right now. Check back later!')
+            return
+
+        embed = discord.Embed(
+            title='🛒 Tooly Shop',
+            description='Purchase items with your coins!\nUse `/buy <item_id>` to purchase.',
+            color=0xFF69B4,
+            timestamp=datetime.utcnow()
+        )
+
+        roles = {k: v for k, v in shop_items.items() if v['type'] == 'role'}
+        badges = {k: v for k, v in shop_items.items() if v['type'] == 'badge'}
+        consumables = {k: v for k, v in shop_items.items() if v['type'] == 'consumable'}
+
+        if roles:
+            role_text = '\n'.join([
+                f"{item['emoji']} **{item['name']}** - {item['price']:,} coins\n"
+                f"└ {item['description']}\n└ ID: `{item_id}`"
+                for item_id, item in roles.items()
+            ])
+            embed.add_field(name='👑 Roles', value=role_text, inline=False)
+
+        if badges:
+            badge_text = '\n'.join([
+                f"{item['emoji']} **{item['name']}** - {item['price']:,} coins\n"
+                f"└ {item['description']}\n└ ID: `{item_id}`"
+                for item_id, item in badges.items()
+            ])
+            embed.add_field(name='🏆 Badges', value=badge_text, inline=False)
+
+        if consumables:
+            consumable_text = '\n'.join([
+                f"{item['emoji']} **{item['name']}** - {item['price']:,} coins\n"
+                f"└ {item['description']}\n└ ID: `{item_id}`"
+                for item_id, item in consumables.items()
+            ])
+            embed.add_field(name='✨ Consumables', value=consumable_text, inline=False)
+
+        user_id = str(ctx.author.id)
+        economy_data = bot_data.get_user_economy(user_id)
+        embed.set_footer(
+            text=f'Your balance: {economy_data["coins"]:,} coins | Use /inventory to see owned items'
+        )
+
+        await ctx.respond(embed=embed)
 
     @discord.slash_command(name='buy', description='Purchase an item from the shop')
     @option("item_id", str, description="Item ID to purchase (see /shop)")
@@ -186,7 +301,7 @@ class Economy(commands.Cog):
         bot_data.add_to_inventory(user_id, item_id)
         bot_data.save()
 
-        # 🧩 FIX: Check and handle missing permissions safely
+        # ✅ FIXED: Proper permission and hierarchy check before role add
         if item['type'] == 'role' and item.get('role_id'):
             role = ctx.guild.get_role(int(item['role_id']))
             if role:
@@ -194,9 +309,9 @@ class Economy(commands.Cog):
                     try:
                         await ctx.author.add_roles(role, reason="Purchased from shop")
                     except discord.Forbidden:
-                        logger.warning(f"❌ Missing permission to add role {role.name}")
+                        logger.warning(f"Missing permission to add role: {role.name}")
                         await ctx.respond(
-                            f'⚠️ I don’t have permission to add the role **{role.name}**. Please check my role position!',
+                            f'⚠️ I don’t have permission to give **{role.name}**. Check my role position!',
                             ephemeral=True
                         )
                 else:
@@ -218,6 +333,87 @@ class Economy(commands.Cog):
         if item['type'] == 'role':
             embed.add_field(name='Role Added', value='✅ (If I have permission)', inline=False)
 
+        await ctx.respond(embed=embed)
+
+    @discord.slash_command(name='inventory', description='View your purchased items')
+    async def inventory(self, ctx):
+        user_id = str(ctx.author.id)
+        inventory = bot_data.get_user_inventory(user_id)
+        shop_items = bot_data.get_shop_items()
+
+        if not inventory:
+            await ctx.respond('📦 Your inventory is empty! Visit `/shop` to buy items.')
+            return
+
+        embed = discord.Embed(
+            title=f'📦 {ctx.author.display_name}\'s Inventory',
+            color=0x9B59B6,
+            timestamp=datetime.utcnow()
+        )
+
+        for item_id, purchase_data in inventory.items():
+            if item_id in shop_items:
+                item = shop_items[item_id]
+                purchased_date = datetime.fromtimestamp(
+                    purchase_data['purchased']
+                ).strftime('%Y-%m-%d')
+                embed.add_field(
+                    name=f"{item['emoji']} {item['name']}",
+                    value=f"{item['description']}\nPurchased: {purchased_date}",
+                    inline=False
+                )
+
+        await ctx.respond(embed=embed)
+
+    @discord.slash_command(name='give', description='Give coins to a user or everyone (Admin only)')
+    @discord.default_permissions(administrator=True)
+    @option("user", discord.Member, description="User to give coins to (ignored if 'everyone' is true)", required=False)
+    @option("everyone", bool, description="Give to everyone in the server", required=False, default=False)
+    @option("amount", int, description="Amount of coins to give", required=True)
+    async def give(self, ctx, amount: int, user: discord.Member = None, everyone: bool = False):
+        if amount <= 0:
+            await ctx.respond("❌ Amount must be greater than zero.", ephemeral=True)
+            return
+
+        if everyone:
+            members = [m for m in ctx.guild.members if not m.bot]
+            count = 0
+            for member in members:
+                user_id = str(member.id)
+                economy_data = bot_data.get_user_economy(user_id)
+                economy_data['coins'] += amount
+                bot_data.set_user_economy(user_id, economy_data)
+                count += 1
+            bot_data.save()
+
+            embed = discord.Embed(
+                title="💸 Global Giveaway!",
+                description=f"Gave **{amount:,} coins** to **everyone** ({count} members)!",
+                color=0xF1C40F,
+                timestamp=datetime.utcnow()
+            )
+            embed.set_footer(text=f'Given by {ctx.author.display_name}')
+            await ctx.respond(embed=embed)
+            return
+
+        if not user:
+            await ctx.respond("❌ You must specify a user or set `everyone` to True.", ephemeral=True)
+            return
+
+        user_id = str(user.id)
+        economy_data = bot_data.get_user_economy(user_id)
+        economy_data['coins'] += amount
+        bot_data.set_user_economy(user_id, economy_data)
+        bot_data.save()
+
+        embed = discord.Embed(
+            title='💸 Coins Given!',
+            description=f'Gave **{amount:,} coins** to {user.mention}',
+            color=0x2ECC71,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name='New Balance', value=f'{economy_data["coins"]:,} coins', inline=True)
+        embed.set_footer(text=f'Given by {ctx.author.display_name}')
         await ctx.respond(embed=embed)
 
 
