@@ -1,0 +1,156 @@
+import json
+import os
+import logging
+from datetime import datetime
+from utils.config import Config
+
+logger = logging.getLogger('tooly_bot.database')
+
+class BotData:
+    def __init__(self):
+        self.data = {
+            'levels': {},
+            'economy': {},
+            'warnings': {},
+            'lastVideoId': '',
+            'leaderboard_messages': {},
+            'shop_items': {},
+            'inventory': {}
+        }
+        os.makedirs('data', exist_ok=True)
+        self.load()
+    
+    def load(self):
+        try:
+            if os.path.exists(Config.DATA_FILE):
+                with open(Config.DATA_FILE, 'r') as f:
+                    loaded = json.load(f)
+                    self.data.update(loaded)
+                logger.info('✅ Data loaded successfully')
+        except Exception as e:
+            logger.error(f'❌ Error loading data: {e}')
+    
+    def save(self):
+        try:
+            with open(Config.DATA_FILE, 'w') as f:
+                json.dump(self.data, f, indent=2)
+        except Exception as e:
+            logger.error(f'❌ Error saving data: {e}')
+    
+    def get_user_level(self, user_id: str):
+        return self.data['levels'].get(user_id, {'xp': 0, 'level': 1, 'lastMessage': 0})
+    
+    def set_user_level(self, user_id: str, data: dict):
+        self.data['levels'][user_id] = data
+    
+    def get_user_economy(self, user_id: str):
+        return self.data['economy'].get(user_id, {
+            'coins': 0, 'bank': 0, 'lastDaily': 0, 'lastWork': 0,
+            'lastFish': 0, 'lastGamble': 0, 'fishCaught': 0,
+            'totalGambled': 0, 'gamblingWins': 0, 'gamblingLosses': 0,
+            'biggestWin': 0, 'biggestLoss': 0, 'winStreak': 0,
+            'currentStreak': 0, 'fishInventory': {}
+        })
+    
+    def set_user_economy(self, user_id: str, data: dict):
+        self.data['economy'][user_id] = data
+    
+    def get_warnings(self, user_id: str):
+        return self.data['warnings'].get(user_id, [])
+    
+    def add_warning(self, user_id: str, warning: dict):
+        if user_id not in self.data['warnings']:
+            self.data['warnings'][user_id] = []
+        self.data['warnings'][user_id].append(warning)
+    
+    def get_shop_items(self):
+        return self.data.get('shop_items', {})
+    
+    def get_user_inventory(self, user_id: str):
+        return self.data.get('inventory', {}).get(user_id, {})
+    
+    def add_to_inventory(self, user_id: str, item_id: str):
+        if 'inventory' not in self.data:
+            self.data['inventory'] = {}
+        if user_id not in self.data['inventory']:
+            self.data['inventory'][user_id] = {}
+        
+        self.data['inventory'][user_id][item_id] = {
+            'purchased': datetime.utcnow().timestamp()
+        }
+
+class ServerSettings:
+    def __init__(self):
+        self.settings = {}
+        self.load()
+    
+    def load(self):
+        try:
+            if os.path.exists(Config.SETTINGS_FILE):
+                with open(Config.SETTINGS_FILE, 'r') as f:
+                    self.settings = json.load(f)
+        except Exception as e:
+            logger.error(f'❌ Error loading settings: {e}')
+    
+    def save(self):
+        try:
+            with open(Config.SETTINGS_FILE, 'w') as f:
+                json.dump(self.settings, f, indent=2)
+        except Exception as e:
+            logger.error(f'❌ Error saving settings: {e}')
+    
+    def get(self, guild_id: str, key: str, default=None):
+        return self.settings.get(guild_id, {}).get(key, default)
+    
+    def set(self, guild_id: str, key: str, value):
+        if guild_id not in self.settings:
+            self.settings[guild_id] = {}
+        self.settings[guild_id][key] = value
+        self.save()
+
+class ReactionRoles:
+    def __init__(self):
+        self.data = {}
+        self.load()
+    
+    def load(self):
+        try:
+            if os.path.exists(Config.REACTIONS_FILE):
+                with open(Config.REACTIONS_FILE, 'r') as f:
+                    self.data = json.load(f)
+        except Exception as e:
+            logger.error(f'❌ Error loading reaction roles: {e}')
+    
+    def save(self):
+        try:
+            with open(Config.REACTIONS_FILE, 'w') as f:
+                json.dump(self.data, f, indent=2)
+        except Exception as e:
+            logger.error(f'❌ Error saving reaction roles: {e}')
+    
+    def add_reaction_role(self, message_id: str, emoji: str, role_id: str):
+        if message_id not in self.data:
+            self.data[message_id] = {}
+        self.data[message_id][emoji] = role_id
+        self.save()
+    
+    def remove_reaction_role(self, message_id: str, emoji: str = None):
+        if message_id in self.data:
+            if emoji:
+                self.data[message_id].pop(emoji, None)
+                if not self.data[message_id]:
+                    del self.data[message_id]
+            else:
+                del self.data[message_id]
+            self.save()
+    
+    def get_role_for_reaction(self, message_id: str, emoji: str):
+        return self.data.get(message_id, {}).get(emoji)
+    
+    def get_all_for_message(self, message_id: str):
+        return self.data.get(message_id, {})
+
+# Global instances
+bot_data = BotData()
+server_settings = ServerSettings()
+reaction_roles = ReactionRoles()

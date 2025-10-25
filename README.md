@@ -8,5 +8,5 @@
 [![Free](https://img.shields.io/badge/Free-100%25-success)](https://github.com/chersbobers/ToolyBot)
 [![Open Source](https://img.shields.io/badge/Open%20Source-%E2%9D%A4-red)](https://github.com/chersbobers/ToolyBot)
 
-A completely free and open source Discord bot with leveling, economy, fishing, moderation, and more. Self-host it, customize it, make it yours.
+
 
