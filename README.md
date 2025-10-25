@@ -8,7 +8,6 @@
 [![Free](https://img.shields.io/badge/Free-100%25-success)](https://github.com/chersbobers/ToolyBot)
 [![Open Source](https://img.shields.io/badge/Open%20Source-%E2%9D%A4-red)](https://github.com/chersbobers/ToolyBot)
 
-<<<<<<< HEAD
 
 =======
 The most peakest bot.
@@ -30,5 +29,5 @@ DM_LOG_CHANNEL_ID=forgettingrepliestodmsfromthebot
 NOTIFICATION_CHANNEL_ID=forcheckingnewytposts needs the YOUTUBE_CHANNEL_ID
 PEXELS_API_KEY=yourpexelsapiforimages
 YOUTUBE_CHANNEL_ID=yourytchannelid
->>>>>>> 849ec7e6cc05dd3bbef60cf294f0d4fd01151307
+
 
