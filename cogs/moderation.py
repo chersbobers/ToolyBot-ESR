@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import option
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -9,6 +9,49 @@ logger = logging.getLogger(__name__)
 class Moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+
+    # ──────────────── DM Reply Handler ────────────────
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        # Ignore bot's own messages
+        if message.author.bot:
+            return
+        
+        # Check if message is a DM (not in a guild)
+        if isinstance(message.channel, discord.DMChannel):
+            try:
+                # Create embed for the reply
+                embed = discord.Embed(
+                    title="📬 DM Received",
+                    description=message.content,
+                    color=0x2ECC71,
+                    timestamp=datetime.now(timezone.utc)
+                )
+                embed.set_author(name=str(message.author), icon_url=message.author.display_avatar.url)
+                embed.set_footer(text=f"User ID: {message.author.id}")
+                
+                # Send to all guilds' system channels or first text channel
+                for guild in self.bot.guilds:
+                    # Try to find a moderation/admin channel first
+                    target_channel = discord.utils.get(guild.text_channels, name="mod-mail") or \
+                                   discord.utils.get(guild.text_channels, name="staff") or \
+                                   discord.utils.get(guild.text_channels, name="admin") or \
+                                   guild.system_channel or \
+                                   guild.text_channels[0] if guild.text_channels else None
+                    
+                    if target_channel:
+                        await target_channel.send(embed=embed)
+                        logger.info(f"DM from {message.author} forwarded to {guild.name}")
+                
+                # Confirm receipt to user
+                await message.reply("✅ Your message has been sent to the server staff. They will respond soon!")
+                
+            except Exception as e:
+                logger.error(f"Error handling DM from {message.author}: {e}", exc_info=True)
+                try:
+                    await message.reply("⚠️ There was an error forwarding your message. Please try again later.")
+                except:
+                    pass
 
     # ──────────────── Mute ────────────────
     @discord.slash_command(name='mute', description='Mute a member (Admin only)')
@@ -84,19 +127,20 @@ class Moderation(commands.Cog):
                 title="📨 Message from Server Staff",
                 description=message,
                 color=0x3498DB,
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now(timezone.utc)
             )
-            embed.set_footer(text=f"Sent by {ctx.author.display_name}")
+            embed.set_footer(text=f"Sent by {ctx.author.display_name} from {ctx.guild.name}")
 
             await user.send(embed=embed)
             await ctx.followup.send(f"✅ Message sent to {user.mention}", ephemeral=True)
-            logger.info(f"DM sent to {user} by {ctx.author}")
+            logger.info(f"DM sent to {user} by {ctx.author} in {ctx.guild.name}")
 
         except discord.Forbidden:
             await ctx.followup.send(f"❌ {user.mention} has DMs disabled or blocked the bot.", ephemeral=True)
+            logger.warning(f"Could not DM {user} - DMs disabled or bot blocked")
         except Exception as e:
-            await ctx.followup.send(f"⚠️ Error: {e}", ephemeral=True)
-            logger.error(f"Error sending DM: {e}")
+            await ctx.followup.send(f"⚠️ Error sending message: {str(e)}", ephemeral=True)
+            logger.error(f"Error sending DM to {user}: {e}", exc_info=True)
 
 
 def setup(bot):
