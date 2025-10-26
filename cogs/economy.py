@@ -317,12 +317,12 @@ class Economy(commands.Cog):
                     except discord.Forbidden:
                         logger.warning(f"Missing permission to add role: {role.name}")
                         await ctx.respond(
-                            f'⚠️ I don't have permission to give **{role.name}**. Check my role position!',
+                            f"⚠️ I don't have permission to give **{role.name}**. Check my role position!",
                             ephemeral=True
                         )
                 else:
                     await ctx.respond(
-                        f'⚠️ My highest role is below **{role.name}**, so I can't assign it!',
+                        f"⚠️ My highest role is below **{role.name}**, so I can't assign it!",
                         ephemeral=True
                     )
 
