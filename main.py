@@ -20,17 +20,6 @@ intents.reactions = True
 
 bot = discord.Bot(intents=intents, auto_sync_commands=True)
 
-# Web server for dashboard
-async def start_web_server():
-    from dashboard import create_app
-    app = create_app(bot)
-    port = int(os.getenv('PORT', 3000))
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    logger.info(f'🌐 Dashboard running on port {port}')
-
 @bot.event
 async def on_ready():
     logger.info(f'✅ Logged in as {bot.user}')
