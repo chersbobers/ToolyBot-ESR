@@ -20,9 +20,24 @@ intents.reactions = True
 
 bot = discord.Bot(intents=intents, auto_sync_commands=True)
 
+# ---------- Web Server ---------- #
+async def start_web_server():
+    async def handle(request):
+        return web.Response(text="Tooly Bot is online!")
+    
+    app = web.Application()
+    app.router.add_get('/', handle)
+    
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', int(os.getenv('PORT', 8080)))
+    await site.start()
+    logger.info('🌐 Web server running on port %s', os.getenv('PORT', 8080))
+
+# ---------- Events ---------- #
 @bot.event
 async def on_ready():
-    logger.info(f'✅ Logged in as {bot.user}')
+    logger.info(f'✅ Logged in as {bot.user} (ID: {bot.user.id})')
     logger.info(f'📊 Connected to {len(bot.guilds)} guilds')
     
     await bot.change_presence(
@@ -46,12 +61,18 @@ async def on_application_command_error(ctx, error):
             ephemeral=True
         )
     elif isinstance(error, commands.MissingPermissions):
-        await ctx.respond('❌ You don\'t have permission to use this command!', ephemeral=True)
+        await ctx.respond(
+            '❌ You don\'t have permission to use this command!',
+            ephemeral=True
+        )
     else:
-        logger.error(f'Command error: {error}')
-        await ctx.respond('❌ An error occurred while executing this command.', ephemeral=True)
+        logger.error(f'Command error: {error}', exc_info=True)
+        await ctx.respond(
+            '❌ An error occurred while executing this command.',
+            ephemeral=True
+        )
 
-# Load all cogs
+# ---------- Load Cogs ---------- #
 def load_cogs():
     cogs = [
         'cogs.leveling',
@@ -71,8 +92,9 @@ def load_cogs():
             bot.load_extension(cog)
             logger.info(f'✅ Loaded {cog}')
         except Exception as e:
-            logger.error(f'❌ Failed to load {cog}: {e}')
+            logger.error(f'❌ Failed to load {cog}: {e}', exc_info=True)
 
+# ---------- Main ---------- #
 if __name__ == '__main__':
     token = os.getenv('TOKEN')
     if not token:
