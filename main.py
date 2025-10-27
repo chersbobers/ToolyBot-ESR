@@ -26,8 +26,7 @@ async def start_web_server():
         return web.Response(text="Tooly Bot is online!")
     
     app = web.Application()
-    app.router.add_get('/', handle)
-    app.router.add_head('/', handle)  # Add HEAD support for health checks
+    app.router.add_route('*', '/', handle)  # Handle all methods including HEAD and GET
     
     runner = web.AppRunner(app)
     await runner.setup()
@@ -43,10 +42,10 @@ async def on_ready():
     logger.info(f'✅ Logged in as {bot.user} (ID: {bot.user.id})')
     logger.info(f'📊 Connected to {len(bot.guilds)} guilds')
     
-    # Manually sync commands
+    # Manually sync commands (py-cord 2.6.1 returns None)
     try:
-        synced = await bot.sync_commands()
-        logger.info(f'✅ Synced {len(synced)} slash commands')
+        await bot.sync_commands()
+        logger.info(f'✅ Command sync initiated')
     except Exception as e:
         logger.error(f'❌ Failed to sync commands: {e}')
     
