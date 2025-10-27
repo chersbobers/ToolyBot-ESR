@@ -71,7 +71,7 @@ async def on_application_command_error(ctx, error):
 
 # --- Cog Loader ---
 def load_cogs():
-    cogs = [
+     cogs = [
         'cogs.leveling',
         'cogs.economy',
         'cogs.fishing',
