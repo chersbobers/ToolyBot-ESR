@@ -7,7 +7,7 @@ import os
 import logging
 from utils.database import bot_data, server_settings
 from utils.config import Config
-from typing import Dict
+
 
 logger = logging.getLogger('tooly_bot.youtube')
 

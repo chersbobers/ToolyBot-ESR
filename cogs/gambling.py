@@ -7,7 +7,7 @@ import random
 import logging
 from utils.database import bot_data
 from utils.config import Config, GAMBLE_GAMES
-from typing import Dict
+
 logger = logging.getLogger('tooly_bot.gambling')
 
 class Gambling(commands.Cog):

@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import option
 import logging
 from utils.database import bot_data, reaction_roles
-from typing import Dict
+
 
 logger = logging.getLogger('tooly_bot.reactions')
 
