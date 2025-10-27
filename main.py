@@ -1,7 +1,9 @@
 import discord
 from discord.ext import commands
 import os
+import asyncio
 import logging
+from aiohttp import web
 
 # Setup logging
 logging.basicConfig(
@@ -18,6 +20,22 @@ intents.reactions = True
 
 bot = discord.Bot(intents=intents, auto_sync_commands=True)
 
+# --- Web Server for Render (keeps app alive) ---
+async def start_web_server():
+    async def handle(request):
+        return web.Response(text="✅ Tooly Bot is running and connected to Discord!")
+
+    app = web.Application()
+    app.router.add_get('/', handle)
+    
+    port = int(os.getenv('PORT', 3000))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    logger.info(f'🌐 Web server running on port {port}')
+
+# --- Discord Bot Events ---
 @bot.event
 async def on_ready():
     logger.info(f'✅ Logged in as {bot.user}')
@@ -30,6 +48,8 @@ async def on_ready():
         )
     )
 
+    # Start dummy web server (for Render)
+    await start_web_server()
     logger.info('🚀 All systems operational!')
 
 @bot.event
@@ -48,7 +68,7 @@ async def on_application_command_error(ctx, error):
         logger.error(f'Command error: {error}')
         await ctx.respond('❌ An error occurred while executing this command.', ephemeral=True)
 
-# Load all cogs
+# --- Cog Loader ---
 def load_cogs():
     cogs = [
         'cogs.leveling',
@@ -70,6 +90,7 @@ def load_cogs():
         except Exception as e:
             logger.error(f'❌ Failed to load {cog}: {e}')
 
+# --- Run Bot ---
 if __name__ == '__main__':
     token = os.getenv('TOKEN')
     if not token:
