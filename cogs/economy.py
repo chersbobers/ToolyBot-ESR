@@ -18,6 +18,7 @@ class Economy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    # -------------------- CREATE ITEM -------------------- #
     @discord.slash_command(name='createitem', description='[ADMIN] Create a new shop item')
     @option("item_id", description="Unique ID for the item")
     @option("name", description="Display name")
@@ -39,7 +40,7 @@ class Economy(commands.Cog):
         role_id: str = None
     ):
         guild_id = str(ctx.guild.id)
-        
+
         if item_type == 'role' and not role_id:
             await ctx.respond('❌ Role items require a role_id!', ephemeral=True)
             return
@@ -48,9 +49,9 @@ class Economy(commands.Cog):
             bot_data.data['shop_items'] = {}
         if guild_id not in bot_data.data['shop_items']:
             bot_data.data['shop_items'][guild_id] = {}
-            
+
         shop_items = bot_data.data['shop_items'][guild_id]
-        
+
         if item_id in shop_items:
             await ctx.respond(f'❌ Item with ID `{item_id}` already exists!', ephemeral=True)
             return
@@ -85,6 +86,7 @@ class Economy(commands.Cog):
 
         await ctx.respond(embed=embed, ephemeral=True)
 
+    # -------------------- DELETE ITEM -------------------- #
     @discord.slash_command(name='deleteitem', description='[ADMIN] Delete a shop item')
     @option("item_id", description="ID of item to delete")
     @discord.default_permissions(administrator=True)
@@ -103,6 +105,7 @@ class Economy(commands.Cog):
 
         await ctx.respond(f'✅ Deleted item: **{item["name"]}** (`{item_id}`)', ephemeral=True)
 
+    # -------------------- LIST ITEMS -------------------- #
     @discord.slash_command(name='listitems', description='[ADMIN] List all shop items with IDs')
     @discord.default_permissions(administrator=True)
     async def listitems(self, ctx):
@@ -123,7 +126,6 @@ class Economy(commands.Cog):
             field_value = f"**Price:** {item['price']:,} coins\n**Type:** {item['type']}\n**Description:** {item['description']}"
             if item.get('role_id'):
                 field_value += f"\n**Role ID:** {item['role_id']}"
-
             embed.add_field(
                 name=f"{item['emoji']} {item['name']} (`{item_id}`)",
                 value=field_value,
@@ -132,6 +134,7 @@ class Economy(commands.Cog):
 
         await ctx.respond(embed=embed, ephemeral=True)
 
+    # -------------------- BALANCE -------------------- #
     @discord.slash_command(name='balance', description='Check your balance')
     @option("user", discord.Member, description="User to check (optional)", required=False)
     async def balance(self, ctx, user: Optional[discord.Member] = None):
@@ -156,6 +159,7 @@ class Economy(commands.Cog):
 
         await ctx.respond(embed=embed)
 
+    # -------------------- DAILY -------------------- #
     @discord.slash_command(name='daily', description='Claim your daily reward')
     async def daily(self, ctx):
         guild_id = str(ctx.guild.id)
@@ -188,6 +192,7 @@ class Economy(commands.Cog):
         embed.add_field(name='New Balance', value=f'{economy_data["coins"]:,} coins', inline=False)
         await ctx.respond(embed=embed)
 
+    # -------------------- WORK -------------------- #
     @discord.slash_command(name='work', description='Work for coins')
     async def work(self, ctx):
         guild_id = str(ctx.guild.id)
@@ -224,6 +229,7 @@ class Economy(commands.Cog):
         embed.add_field(name='New Balance', value=f'{economy_data["coins"]:,} coins', inline=False)
         await ctx.respond(embed=embed)
 
+    # -------------------- SHOP -------------------- #
     @discord.slash_command(name='shop', description='Browse the shop')
     async def shop(self, ctx):
         guild_id = str(ctx.guild.id)
@@ -276,6 +282,7 @@ class Economy(commands.Cog):
 
         await ctx.respond(embed=embed)
 
+    # -------------------- BUY -------------------- #
     @discord.slash_command(name='buy', description='Purchase an item from the shop')
     @option("item_id", str, description="Item ID to purchase (see /shop)")
     async def buy(self, ctx, item_id: str):
@@ -335,12 +342,12 @@ class Economy(commands.Cog):
         embed.add_field(name='Item', value=f"{item['emoji']} {item['name']}", inline=True)
         embed.add_field(name='Price', value=f'{item["price"]:,} coins', inline=True)
         embed.add_field(name='Remaining Balance', value=f'{economy_data["coins"]:,} coins', inline=True)
-
         if item['type'] == 'role':
             embed.add_field(name='Role Added', value='✅ (If I have permission)', inline=False)
 
         await ctx.respond(embed=embed)
 
+    # -------------------- INVENTORY -------------------- #
     @discord.slash_command(name='inventory', description='View your purchased items')
     async def inventory(self, ctx):
         guild_id = str(ctx.guild.id)
@@ -372,6 +379,7 @@ class Economy(commands.Cog):
 
         await ctx.respond(embed=embed)
 
+    # -------------------- GIVE -------------------- #
     @discord.slash_command(name='give', description='Give coins to a user or everyone (Admin only)')
     @discord.default_permissions(administrator=True)
     @option("user", discord.Member, description="User to give coins to (ignored if 'everyone' is true)", required=False)
@@ -379,30 +387,37 @@ class Economy(commands.Cog):
     @option("amount", int, description="Amount of coins to give", required=True)
     async def give(self, ctx, amount: int, user: discord.Member = None, everyone: bool = False):
         guild_id = str(ctx.guild.id)
-        
+
         if amount <= 0:
             await ctx.respond("❌ Amount must be greater than zero.", ephemeral=True)
             return
 
         if everyone:
+            await ctx.defer()  # Important for long operations
+
             members = [m for m in ctx.guild.members if not m.bot]
             count = 0
+
+            logger.info(f"Starting global give: {amount} coins to {len(members)} members")
+
             for member in members:
                 user_id = str(member.id)
                 economy_data = bot_data.get_user_economy(guild_id, user_id)
                 economy_data['coins'] += amount
                 bot_data.set_user_economy(guild_id, user_id, economy_data)
                 count += 1
+
             bot_data.save()
+            logger.info(f"✅ Gave {amount} coins to {count} members, data saved")
 
             embed = discord.Embed(
                 title="💸 Global Giveaway!",
-                description=f"Gave **{amount:,} coins** to **everyone** ({count} members)!",
+                description=f"Gave **{amount:,} coins** to **{count} members**!",
                 color=0xF1C40F,
                 timestamp=datetime.utcnow()
             )
             embed.set_footer(text=f'Given by {ctx.author.display_name}')
-            await ctx.respond(embed=embed)
+            await ctx.followup.send(embed=embed)
             return
 
         if not user:
@@ -418,6 +433,7 @@ class Economy(commands.Cog):
         embed = discord.Embed(
             title='💸 Coins Given!',
             description=f'Gave **{amount:,} coins** to {user.mention}',
+            color=0
             color=0x2ECC71,
             timestamp=datetime.utcnow()
         )
@@ -425,24 +441,27 @@ class Economy(commands.Cog):
         embed.set_footer(text=f'Given by {ctx.author.display_name}')
         await ctx.respond(embed=embed)
 
+    # -------------------- RESET ECONOMY -------------------- #
     @discord.slash_command(name='reseteconomy', description='[ADMIN] Reset ALL economy data for this server')
     @discord.default_permissions(administrator=True)
     async def reseteconomy(self, ctx):
         guild_id = str(ctx.guild.id)
-        
+
         view = discord.ui.View()
-        
+
         async def confirm_callback(interaction):
             if interaction.user.id != ctx.author.id:
-                await interaction.response.send_message("❌ Only the command user can confirm this!", ephemeral=True)
+                await interaction.response.send_message(
+                    "❌ Only the command user can confirm this!", ephemeral=True
+                )
                 return
-                
+
             if guild_id in bot_data.data.get('economy', {}):
                 del bot_data.data['economy'][guild_id]
             if guild_id in bot_data.data.get('inventory', {}):
                 del bot_data.data['inventory'][guild_id]
             bot_data.save()
-            
+
             embed = discord.Embed(
                 title='✅ Economy Reset Complete',
                 description='All user coins, banks, and inventories have been wiped for this server.',
@@ -450,12 +469,14 @@ class Economy(commands.Cog):
                 timestamp=datetime.utcnow()
             )
             await interaction.response.edit_message(embed=embed, view=None)
-        
+
         async def cancel_callback(interaction):
             if interaction.user.id != ctx.author.id:
-                await interaction.response.send_message("❌ Only the command user can cancel this!", ephemeral=True)
+                await interaction.response.send_message(
+                    "❌ Only the command user can cancel this!", ephemeral=True
+                )
                 return
-            
+
             embed = discord.Embed(
                 title='❌ Reset Cancelled',
                 description='Economy data was not reset.',
@@ -463,25 +484,29 @@ class Economy(commands.Cog):
                 timestamp=datetime.utcnow()
             )
             await interaction.response.edit_message(embed=embed, view=None)
-        
+
         confirm_button = discord.ui.Button(label="✅ Confirm Reset", style=discord.ButtonStyle.danger)
         confirm_button.callback = confirm_callback
-        
+
         cancel_button = discord.ui.Button(label="❌ Cancel", style=discord.ButtonStyle.secondary)
         cancel_button.callback = cancel_callback
-        
+
         view.add_item(confirm_button)
         view.add_item(cancel_button)
-        
+
         embed = discord.Embed(
             title='⚠️ Economy Reset Confirmation',
-            description='**WARNING:** This will permanently delete:\n• All user coins and bank balances\n• All user inventories\n\n**This action cannot be undone!**',
+            description='**WARNING:** This will permanently delete:\n'
+                        '• All user coins and bank balances\n'
+                        '• All user inventories\n\n'
+                        '**This action cannot be undone!**',
             color=0xFF0000,
             timestamp=datetime.utcnow()
         )
-        
+
         await ctx.respond(embed=embed, view=view, ephemeral=True)
 
 
+# -------------------- SETUP -------------------- #
 def setup(bot):
     bot.add_cog(Economy(bot))
