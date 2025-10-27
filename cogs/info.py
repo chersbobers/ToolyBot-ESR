@@ -7,7 +7,7 @@ import platform
 import psutil
 import logging
 from utils.database import bot_data
-
+from typing import Dict
 logger = logging.getLogger('tooly_bot.info')
 
 class Info(commands.Cog):

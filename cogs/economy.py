@@ -6,6 +6,7 @@ from typing import Optional
 import random
 import logging
 
+
 from utils.database import bot_data
 from utils.config import Config
 
@@ -430,10 +431,9 @@ class Economy(commands.Cog):
         bot_data.set_user_economy(guild_id, user_id, economy_data)
         bot_data.save()
 
-        embed = discord.Embed(
+          embed = discord.Embed(
             title='💸 Coins Given!',
             description=f'Gave **{amount:,} coins** to {user.mention}',
-            color=0
             color=0x2ECC71,
             timestamp=datetime.utcnow()
         )

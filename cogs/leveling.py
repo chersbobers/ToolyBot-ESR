@@ -7,6 +7,7 @@ import random
 import logging
 from utils.database import bot_data
 from utils.config import Config
+from typing import Dict
 
 logger = logging.getLogger('tooly_bot.leveling')
 
