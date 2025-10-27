@@ -70,8 +70,8 @@ async def on_application_command_error(ctx, error):
         await ctx.respond('❌ An error occurred while executing this command.', ephemeral=True)
 
 # --- Cog Loader ---
-def load_cogs():
-     cogs = [
+# def load_cogs():
+    cogs = [
         'cogs.leveling',
         'cogs.economy',
         'cogs.fishing',
