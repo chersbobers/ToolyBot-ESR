@@ -6,7 +6,7 @@ import random
 import logging
 from utils.database import bot_data
 from utils.config import Config, FISH_TYPES
-
+from typing import Dict
 
 logger = logging.getLogger('tooly_bot.fishing')
 

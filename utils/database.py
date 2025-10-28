@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from copy import deepcopy
 from utils.config import Config
 
+
 logger = logging.getLogger('tooly_bot.database')
 
 class BotData:
