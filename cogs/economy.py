@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 import random
 import logging
-from typing import Dict
+
 
 from utils.database import bot_data
 from utils.config import Config
