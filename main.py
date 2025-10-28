@@ -84,7 +84,7 @@ def load_cogs():
         'cogs.youtube'
     ]
     
-for cog in cogs:
+    for cog in cogs:
         try:
             bot.load_extension(cog)
             logger.info(f'✅ Loaded {cog}')
