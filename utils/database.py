@@ -3,11 +3,13 @@ import os
 import logging
 from datetime import datetime, timezone
 from copy import deepcopy
-from typing import Dict, Any  # ADD THIS LINE
-from utils.config import Config
-
+from typing import Dict, Any
+import threading
 
 logger = logging.getLogger('tooly_bot.database')
+
+# Use persistent disk path on Render, fallback to local for development
+DATA_DIR = os.getenv('RENDER_DISK_PATH', 'data')
 
 class BotData:
     def __init__(self):
@@ -20,8 +22,9 @@ class BotData:
             'shop_items': {},
             'inventory': {}
         }
-        self.filename = 'data/bot_data.json'  # ADD THIS LINE - was missing
-        os.makedirs('data', exist_ok=True)
+        self.filename = os.path.join(DATA_DIR, 'bot_data.json')
+        self.lock = threading.Lock()  # Thread-safe saving
+        os.makedirs(DATA_DIR, exist_ok=True)
         self.load()
     
     def load(self):
@@ -47,13 +50,17 @@ class BotData:
             self.save()
     
     def save(self):
-        """Save data to JSON file"""
-        try:
-            with open(self.filename, 'w') as f:
-                json.dump(self.data, f, indent=2)
-            logger.debug(f'💾 Saved data to {self.filename}')
-        except Exception as e:
-            logger.error(f'❌ Failed to save {self.filename}: {e}')
+        """Save data to JSON file with thread safety"""
+        with self.lock:
+            try:
+                # Write to temp file first, then rename (atomic operation)
+                temp_file = self.filename + '.tmp'
+                with open(temp_file, 'w') as f:
+                    json.dump(self.data, f, indent=2)
+                os.replace(temp_file, self.filename)
+                logger.debug(f'💾 Saved data to {self.filename}')
+            except Exception as e:
+                logger.error(f'❌ Failed to save {self.filename}: {e}')
     
     def get_user_level(self, guild_id: str, user_id: str) -> Dict[str, Any]:
         """Get user level data - RETURNS A COPY"""
@@ -69,6 +76,7 @@ class BotData:
                 'lastMessage': 0
             }
             self.data['levels'][guild_id][user_id] = default_data
+            self.save()
             logger.debug(f'Created new level entry for user {user_id} in guild {guild_id}')
         
         return deepcopy(self.data['levels'][guild_id][user_id])
@@ -81,17 +89,17 @@ class BotData:
             self.data['levels'][guild_id] = {}
         
         self.data['levels'][guild_id][user_id] = data
+        self.save()
         logger.debug(f'Updated level for user {user_id} in guild {guild_id}')
     
     def get_user_economy(self, guild_id: str, user_id: str) -> Dict[str, Any]:
-        """Get user economy data - RETURNS A COPY to avoid reference issues"""
+        """Get user economy data - RETURNS A COPY"""
         if 'economy' not in self.data:
             self.data['economy'] = {}
         if guild_id not in self.data['economy']:
             self.data['economy'][guild_id] = {}
         
         if user_id not in self.data['economy'][guild_id]:
-            # Create new user with default values
             default_data = {
                 'coins': 0,
                 'bank': 0,
@@ -99,20 +107,20 @@ class BotData:
                 'lastWork': 0
             }
             self.data['economy'][guild_id][user_id] = default_data
+            self.save()
             logger.debug(f'Created new economy entry for user {user_id} in guild {guild_id}')
         
-        # Return a COPY to prevent reference issues
         return deepcopy(self.data['economy'][guild_id][user_id])
     
     def set_user_economy(self, guild_id: str, user_id: str, data: Dict[str, Any]):
-        """Set user economy data - properly updates without overwriting others"""
+        """Set user economy data"""
         if 'economy' not in self.data:
             self.data['economy'] = {}
         if guild_id not in self.data['economy']:
             self.data['economy'][guild_id] = {}
         
-        # Update only this user's data, preserving others
         self.data['economy'][guild_id][user_id] = data
+        self.save()
         logger.debug(f'Updated economy for user {user_id} in guild {guild_id}: {data}')
     
     def get_user_inventory(self, guild_id: str, user_id: str) -> Dict[str, Any]:
@@ -135,11 +143,14 @@ class BotData:
         if user_id not in self.data['inventory'][guild_id]:
             self.data['inventory'][guild_id][user_id] = {}
         
-        from datetime import datetime
-        self.data['inventory'][guild_id][user_id][item_id] = {
-            'purchased': datetime.utcnow().timestamp(),
-            'quantity': self.data['inventory'][guild_id][user_id].get(item_id, {}).get('quantity', 0) + 1
-        }
+        if item_id in self.data['inventory'][guild_id][user_id]:
+            self.data['inventory'][guild_id][user_id][item_id]['quantity'] += 1
+        else:
+            self.data['inventory'][guild_id][user_id][item_id] = {
+                'purchased': datetime.utcnow().timestamp(),
+                'quantity': 1
+            }
+        self.save()
         logger.info(f'Added item {item_id} to user {user_id} in guild {guild_id}')
     
     def get_shop_items(self, guild_id: str) -> Dict[str, Any]:
@@ -150,14 +161,94 @@ class BotData:
             self.data['shop_items'][guild_id] = {}
         
         return deepcopy(self.data['shop_items'][guild_id])
+    
+    def set_shop_items(self, guild_id: str, items: Dict[str, Any]):
+        """Set shop items for a guild"""
+        if 'shop_items' not in self.data:
+            self.data['shop_items'] = {}
+        
+        self.data['shop_items'][guild_id] = items
+        self.save()
+    
+    def get_warnings(self, guild_id: str, user_id: str) -> list:
+        """Get user warnings"""
+        if 'warnings' not in self.data:
+            self.data['warnings'] = {}
+        if guild_id not in self.data['warnings']:
+            self.data['warnings'][guild_id] = {}
+        if user_id not in self.data['warnings'][guild_id]:
+            self.data['warnings'][guild_id][user_id] = []
+        
+        return deepcopy(self.data['warnings'][guild_id][user_id])
+    
+    def add_warning(self, guild_id: str, user_id: str, reason: str, moderator_id: str):
+        """Add warning to user"""
+        if 'warnings' not in self.data:
+            self.data['warnings'] = {}
+        if guild_id not in self.data['warnings']:
+            self.data['warnings'][guild_id] = {}
+        if user_id not in self.data['warnings'][guild_id]:
+            self.data['warnings'][guild_id][user_id] = []
+        
+        warning = {
+            'reason': reason,
+            'moderator_id': moderator_id,
+            'timestamp': datetime.utcnow().timestamp()
+        }
+        self.data['warnings'][guild_id][user_id].append(warning)
+        self.save()
+    
+    def clear_warnings(self, guild_id: str, user_id: str):
+        """Clear all warnings for a user"""
+        if 'warnings' not in self.data:
+            self.data['warnings'] = {}
+        if guild_id not in self.data['warnings']:
+            self.data['warnings'][guild_id] = {}
+        
+        self.data['warnings'][guild_id][user_id] = []
+        self.save()
+    
+    def get_last_video_id(self, guild_id: str) -> str:
+        """Get last video ID for YouTube notifications"""
+        if 'lastVideoId' not in self.data:
+            self.data['lastVideoId'] = {}
+        
+        return self.data['lastVideoId'].get(guild_id)
+    
+    def set_last_video_id(self, guild_id: str, video_id: str):
+        """Set last video ID for YouTube notifications"""
+        if 'lastVideoId' not in self.data:
+            self.data['lastVideoId'] = {}
+        
+        self.data['lastVideoId'][guild_id] = video_id
+        self.save()
+    
+    def get_leaderboard_message(self, guild_id: str) -> Dict[str, Any]:
+        """Get leaderboard message info"""
+        if 'leaderboard_messages' not in self.data:
+            self.data['leaderboard_messages'] = {}
+        
+        return self.data['leaderboard_messages'].get(guild_id, {})
+    
+    def set_leaderboard_message(self, guild_id: str, channel_id: str, message_id: str):
+        """Set leaderboard message info"""
+        if 'leaderboard_messages' not in self.data:
+            self.data['leaderboard_messages'] = {}
+        
+        self.data['leaderboard_messages'][guild_id] = {
+            'channel_id': channel_id,
+            'message_id': message_id
+        }
+        self.save()
 
 
 class ReactionRoles:
     """Manages reaction role mappings"""
     def __init__(self):
         self.data = {}
-        self.filename = 'data/reaction_roles.json'
-        os.makedirs('data', exist_ok=True)
+        self.filename = os.path.join(DATA_DIR, 'reaction_roles.json')
+        self.lock = threading.Lock()
+        os.makedirs(DATA_DIR, exist_ok=True)
         self.load()
     
     def load(self):
@@ -176,12 +267,15 @@ class ReactionRoles:
     
     def save(self):
         """Save reaction roles to JSON"""
-        try:
-            with open(self.filename, 'w') as f:
-                json.dump(self.data, f, indent=2)
-            logger.debug(f'💾 Saved reaction roles to {self.filename}')
-        except Exception as e:
-            logger.error(f'❌ Failed to save {self.filename}: {e}')
+        with self.lock:
+            try:
+                temp_file = self.filename + '.tmp'
+                with open(temp_file, 'w') as f:
+                    json.dump(self.data, f, indent=2)
+                os.replace(temp_file, self.filename)
+                logger.debug(f'💾 Saved reaction roles to {self.filename}')
+            except Exception as e:
+                logger.error(f'❌ Failed to save {self.filename}: {e}')
     
     def add_reaction_role(self, guild_id: str, message_id: str, emoji: str, role_id: str):
         """Add a reaction role mapping"""
@@ -215,8 +309,9 @@ class ServerSettings:
     """Manages per-server settings"""
     def __init__(self):
         self.data = {}
-        self.filename = 'data/server_settings.json'
-        os.makedirs('data', exist_ok=True)
+        self.filename = os.path.join(DATA_DIR, 'server_settings.json')
+        self.lock = threading.Lock()
+        os.makedirs(DATA_DIR, exist_ok=True)
         self.load()
     
     def load(self):
@@ -235,12 +330,15 @@ class ServerSettings:
     
     def save(self):
         """Save server settings to JSON"""
-        try:
-            with open(self.filename, 'w') as f:
-                json.dump(self.data, f, indent=2)
-            logger.debug(f'💾 Saved server settings to {self.filename}')
-        except Exception as e:
-            logger.error(f'❌ Failed to save {self.filename}: {e}')
+        with self.lock:
+            try:
+                temp_file = self.filename + '.tmp'
+                with open(temp_file, 'w') as f:
+                    json.dump(self.data, f, indent=2)
+                os.replace(temp_file, self.filename)
+                logger.debug(f'💾 Saved server settings to {self.filename}')
+            except Exception as e:
+                logger.error(f'❌ Failed to save {self.filename}: {e}')
     
     def get(self, guild_id: str, key: str, default=None):
         """Get a setting for a guild"""
@@ -253,6 +351,10 @@ class ServerSettings:
         
         self.data[guild_id][key] = value
         self.save()
+    
+    def get_all(self, guild_id: str) -> Dict[str, Any]:
+        """Get all settings for a guild"""
+        return deepcopy(self.data.get(guild_id, {}))
 
 
 # Global instances
