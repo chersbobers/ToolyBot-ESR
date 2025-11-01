@@ -327,7 +327,7 @@ async def handle_dashboard(request):
                         <div style="color: #666; font-size: 0.9rem;">${{guild.member_count || 'Unknown'}} members</div>
                         ${{guild.bot_in_guild 
                             ? `<a href="/dashboard/${{guild.id}}" class="guild-btn">Manage Server</a>`
-                            : `<a href="https://discord.com/oauth2/authorize?client_id=1364754804844269589&permissions=8&response_type=code&redirect_uri=https%3A%2F%2Ftooly.chersbobers.com%2Fcallback&integration_type=0&scope=bot+applications.commands+guilds.members.read"}} class="guild-btn">Add Bot</a>`
+                            : `<a href="https://discord.com/api/oauth2/authorize?client_id={DASHBOARD_CONFIG['CLIENT_ID']}&permissions=8&scope=bot%20applications.commands&guild_id=${{guild.id}}" class="guild-btn">Add Bot</a>`
                         }}
                     `;
                     
