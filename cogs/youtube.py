@@ -72,38 +72,42 @@ class YouTube(commands.Cog):
                 latest = feed.entries[0]
                 video_id = latest.id
                 
-                if video_id != bot_data.data['lastVideoId'] and bot_data.data['lastVideoId']:
-                    channel = self.bot.get_channel(int(notif_channel_id))
-                    if channel:
-                        guild_id = str(channel.guild.id)
-                        
-                        # Check if notifications are enabled
-                        if not server_settings.get(guild_id, 'notifications_enabled', True):
-                            logger.info(f'🔕 Notifications disabled for guild {guild_id}')
-                            bot_data.data['lastVideoId'] = video_id
-                            bot_data.save()
-                            return
-
-                        embed = discord.Embed(
-                            title='🎬 New YouTube Video!',
-                            description=f'**{latest.title}**',
-                            url=latest.link,
-                            color=0xFF0000,
-                            timestamp=datetime.utcnow()
-                        )
-                        
-                        if hasattr(latest, 'media_thumbnail'):
-                            embed.set_thumbnail(url=latest.media_thumbnail[0]['url'])
-                        
-                        embed.add_field(name='Channel', value=latest.author, inline=True)
-                        pub_date = datetime.strptime(latest.published, '%Y-%m-%dT%H:%M:%S%z')
-                        embed.add_field(name='Published', value=pub_date.strftime('%Y-%m-%d %H:%M'), inline=True)
-                        
-                        await channel.send('📺 New video alert! @everyone', embed=embed)
-                        logger.info(f'📺 New video notification sent: {latest.title}')
+                # Get the notification channel to determine guild_id
+                channel = self.bot.get_channel(int(notif_channel_id))
+                if not channel:
+                    return
                 
-                bot_data.data['lastVideoId'] = video_id
-                bot_data.save()
+                guild_id = str(channel.guild.id)
+                
+                # FIX: Use proper method with guild_id parameter
+                last_video_id = bot_data.get_last_video_id(guild_id)
+                
+                if video_id != last_video_id and last_video_id:
+                    # Check if notifications are enabled
+                    if not server_settings.get(guild_id, 'notifications_enabled', True):
+                        logger.info(f'🔕 Notifications disabled for guild {guild_id}')
+                        bot_data.set_last_video_id(guild_id, video_id)
+                        return
+
+                    embed = discord.Embed(
+                        title='🎬 New YouTube Video!',
+                        description=f'**{latest.title}**',
+                        url=latest.link,
+                        color=0xFF0000,
+                        timestamp=datetime.utcnow()
+                    )
+                    
+                    if hasattr(latest, 'media_thumbnail'):
+                        embed.set_thumbnail(url=latest.media_thumbnail[0]['url'])
+                    
+                    embed.add_field(name='Channel', value=latest.author, inline=True)
+                    pub_date = datetime.strptime(latest.published, '%Y-%m-%dT%H:%M:%S%z')
+                    embed.add_field(name='Published', value=pub_date.strftime('%Y-%m-%d %H:%M'), inline=True)
+                    
+                    await channel.send('📺 New video alert! @everyone', embed=embed)
+                    logger.info(f'📺 New video notification sent: {latest.title}')
+                
+                bot_data.set_last_video_id(guild_id, video_id)
         
         except Exception as e:
             logger.error(f'❌ Error checking videos: {e}')

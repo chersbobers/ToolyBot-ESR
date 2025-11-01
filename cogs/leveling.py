@@ -27,8 +27,11 @@ class Leveling(commands.Cog):
         if message.author.bot or isinstance(message.channel, discord.DMChannel):
             return
         
+        guild_id = str(message.guild.id)
         user_id = str(message.author.id)
-        user_data = bot_data.get_user_level(user_id)
+        
+        # FIX: Added guild_id parameter
+        user_data = bot_data.get_user_level(guild_id, user_id)
         now = datetime.utcnow().timestamp()
         
         if now - user_data['lastMessage'] >= Config.XP_COOLDOWN:
@@ -49,27 +52,32 @@ class Leveling(commands.Cog):
                 ]
                 
                 coin_reward = user_data['level'] * Config.LEVEL_UP_MULTIPLIER
-                economy_data = bot_data.get_user_economy(user_id)
+                economy_data = bot_data.get_user_economy(guild_id, user_id)
                 economy_data['coins'] += coin_reward
-                bot_data.set_user_economy(user_id, economy_data)
+                bot_data.set_user_economy(guild_id, user_id, economy_data)
                 
                 await message.channel.send(
                     f'{random.choice(messages)} You earned **{coin_reward:,} coins**! 💰'
                 )
             
-            bot_data.set_user_level(user_id, user_data)
+            bot_data.set_user_level(guild_id, user_id, user_data)
     
     @discord.slash_command(name='rank', description='Check your rank and level')
     @option("user", discord.Member, description="User to check (optional)", required=False)
     async def rank(self, ctx, user: Optional[discord.Member] = None):
         target = user or ctx.author
+        guild_id = str(ctx.guild.id)
         user_id = str(target.id)
-        user_data = bot_data.get_user_level(user_id)
-        economy_data = bot_data.get_user_economy(user_id)
+        
+        user_data = bot_data.get_user_level(guild_id, user_id)
+        economy_data = bot_data.get_user_economy(guild_id, user_id)
         xp_needed = user_data['level'] * Config.XP_PER_LEVEL
         
-        all_users = sorted(bot_data.data['levels'].items(), key=lambda x: (x[1]['level'], x[1]['xp']), reverse=True)
-        rank = next((i + 1 for i, (uid, _) in enumerate(all_users) if uid == user_id), 'Unranked')
+        # FIX: Get all users for this guild
+        all_users = list(bot_data.levels_col.find({'guild_id': guild_id}))
+        all_users.sort(key=lambda x: (x.get('level', 1), x.get('xp', 0)), reverse=True)
+        
+        rank = next((i + 1 for i, u in enumerate(all_users) if u.get('user_id') == user_id), 'Unranked')
         
         progress_percent = int((user_data['xp'] / xp_needed) * 100) if xp_needed > 0 else 0
         progress_bar = self.create_progress_bar(user_data['xp'], xp_needed, length=20)
@@ -112,7 +120,8 @@ class Leveling(commands.Cog):
     
     @discord.slash_command(name='leaderboard', description='View the server leaderboard')
     async def leaderboard(self, ctx):
-        embed = self.generate_leaderboard_embed()
+        guild_id = str(ctx.guild.id)
+        embed = self.generate_leaderboard_embed(guild_id)
         await ctx.respond(embed=embed)
     
     @discord.slash_command(name='setleaderboard', description='[ADMIN] Set auto-updating leaderboard in this channel')
@@ -120,17 +129,16 @@ class Leveling(commands.Cog):
     async def setleaderboard(self, ctx):
         await ctx.defer()
         
-        embed = self.generate_leaderboard_embed()
+        guild_id = str(ctx.guild.id)
+        embed = self.generate_leaderboard_embed(guild_id)
         message = await ctx.channel.send(embed=embed)
         
-        if 'leaderboard_messages' not in bot_data.data:
-            bot_data.data['leaderboard_messages'] = {}
-        
-        bot_data.data['leaderboard_messages'][str(ctx.guild.id)] = {
-            'channel_id': str(ctx.channel.id),
-            'message_id': str(message.id)
-        }
-        bot_data.save()
+        # FIX: Use proper method to store leaderboard messages
+        bot_data.set_leaderboard_message(
+            guild_id,
+            str(ctx.channel.id),
+            str(message.id)
+        )
         
         await ctx.followup.send('✅ Auto-updating leaderboard created! It will update every hour.')
     
@@ -143,19 +151,26 @@ class Leveling(commands.Cog):
         percentage = int((current / total) * 100)
         return f'`{bar}` {percentage}%'
     
-    def generate_leaderboard_embed(self):
-        all_users = sorted(bot_data.data['levels'].items(), key=lambda x: (x[1]['level'], x[1]['xp']), reverse=True)[:10]
+    def generate_leaderboard_embed(self, guild_id: str):
+        # FIX: Query MongoDB directly for guild-specific leaderboard
+        all_users = list(bot_data.levels_col.find({'guild_id': guild_id}))
+        all_users.sort(key=lambda x: (x.get('level', 1), x.get('xp', 0)), reverse=True)
+        all_users = all_users[:10]
         
         description = []
-        for i, (user_id, data) in enumerate(all_users):
+        for i, user_doc in enumerate(all_users):
             medal = '🥇' if i == 0 else '🥈' if i == 1 else '🥉' if i == 2 else f'**{i+1}.**'
             
-            economy_data = bot_data.get_user_economy(user_id)
+            user_id = user_doc.get('user_id')
+            level = user_doc.get('level', 1)
+            xp = user_doc.get('xp', 0)
+            
+            economy_data = bot_data.get_user_economy(guild_id, user_id)
             total_coins = economy_data.get('coins', 0) + economy_data.get('bank', 0)
             
             description.append(
                 f'{medal} <@{user_id}>\n'
-                f'└ Level {data["level"]} ({data["xp"]:,} XP) • {total_coins:,} coins'
+                f'└ Level {level} ({xp:,} XP) • {total_coins:,} coins'
             )
         
         embed = discord.Embed(
@@ -169,27 +184,39 @@ class Leveling(commands.Cog):
     
     @tasks.loop(seconds=Config.AUTOSAVE_INTERVAL)
     async def autosave(self):
+        # MongoDB auto-saves, but keep for compatibility
         bot_data.save()
         logger.info('💾 Data autosaved')
     
     @tasks.loop(seconds=Config.LEADERBOARD_UPDATE_INTERVAL)
     async def update_leaderboard(self):
         try:
-            for guild_id, msg_data in bot_data.data.get('leaderboard_messages', {}).items():
-                channel = self.bot.get_channel(int(msg_data['channel_id']))
+            # FIX: Query all guilds with leaderboard messages
+            leaderboard_docs = bot_data.leaderboards_col.find({})
+            
+            for doc in leaderboard_docs:
+                guild_id = doc.get('guild_id')
+                channel_id = doc.get('channel_id')
+                message_id = doc.get('message_id')
+                
+                if not all([guild_id, channel_id, message_id]):
+                    continue
+                
+                channel = self.bot.get_channel(int(channel_id))
                 if not channel:
                     continue
                     
                 try:
-                    message = await channel.fetch_message(int(msg_data['message_id']))
-                    embed = self.generate_leaderboard_embed()
+                    message = await channel.fetch_message(int(message_id))
+                    embed = self.generate_leaderboard_embed(guild_id)
                     await message.edit(embed=embed)
                     logger.info(f'📊 Updated leaderboard for guild {guild_id}')
                 except discord.NotFound:
-                    del bot_data.data['leaderboard_messages'][guild_id]
-                    bot_data.save()
+                    # Delete invalid leaderboard message
+                    bot_data.leaderboards_col.delete_one({'guild_id': guild_id})
+                    logger.info(f'🗑️ Removed invalid leaderboard for guild {guild_id}')
                 except Exception as e:
-                    logger.error(f'❌ Error updating leaderboard: {e}')
+                    logger.error(f'❌ Error updating leaderboard for guild {guild_id}: {e}')
         except Exception as e:
             logger.error(f'❌ Leaderboard update error: {e}')
     
